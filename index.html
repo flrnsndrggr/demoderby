@@ -1,394 +1,923 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-  <title>Fish Duel P2P</title>
-  <style>
-    :root { color-scheme: dark; }
-    html, body { height:100%; width:100%; margin:0; padding:0; background:#0b0f14; overflow:hidden; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
-    #ui { position:fixed; inset:0; pointer-events:none; }
-    #hud { position:absolute; top:12px; left:12px; display:flex; gap:6px; align-items:center; pointer-events:none; }
-    .heart { width:24px; height:24px; filter: drop-shadow(0 0 6px rgba(255,0,70,.4)); }
-    #status { position:absolute; top:12px; right:12px; pointer-events:auto; }
-    .pill { display:inline-flex; align-items:center; gap:8px; padding:8px 12px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.15); border-radius:999px; backdrop-filter: blur(6px); font-size:12px; }
-    .btn { cursor:pointer; padding:6px 10px; border-radius:8px; border:1px solid rgba(255,255,255,.2); background:rgba(255,255,255,.1); pointer-events:auto; }
-    .btn:hover { background:rgba(255,255,255,.18); }
-    #shareLink { max-width:46vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    #center { position:absolute; inset:0; display:grid; place-items:center; pointer-events:none; }
-    #crosshair { width:16px; height:16px; border:2px solid rgba(255,255,255,.8); border-radius:50%; box-shadow:0 0 0 2px rgba(255,255,255,.2) inset; }
-    #overlay { position:fixed; inset:0; display:grid; place-items:center; background:radial-gradient(1200px 600px at 50% 0%, rgba(22,28,36,.85), rgba(11,15,20,.95)); color:#e7edf3; }
-    #card { width:min(680px, 92vw); padding:24px; border-radius:16px; background:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.04)); border:1px solid rgba(255,255,255,.16); box-shadow:0 10px 40px rgba(0,0,0,.35); }
-    h1 { margin:0 0 8px 0; font-size:28px; letter-spacing:.5px; }
-    p { margin:6px 0; opacity:.9; }
-    code { padding:2px 6px; background:rgba(255,255,255,.08); border-radius:6px; }
-    #startBtn { margin-top:14px; padding:12px 16px; border-radius:12px; border:1px solid rgba(255,255,255,.25); background:#23b2ff1a; color:#e7edf3; cursor:pointer; }
-    #footerHint { margin-top:10px; font-size:12px; opacity:.8; }
-    #toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:rgba(10,14,18,.8); color:#e7edf3; border:1px solid rgba(255,255,255,.18); border-radius:12px; padding:8px 12px; box-shadow:0 10px 30px rgba(0,0,0,.4); display:none; }
-    canvas { display:block; }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lair of the Lamb - Standalone</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #151922;
+    --ink: #e6e6e6;
+    --muted: #9aa3b2;
+    --accent: #7cc4ff;
+    --danger: #ff6b6b;
+    --ok: #73e2a7;
+    --warn: #ffd166;
+  }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    line-height: 1.35;
+  }
+  header {
+    padding: 12px 16px;
+    background: #0b0e13;
+    border-bottom: 1px solid #222836;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 3;
+  }
+  header h1 { font-size: 18px; margin: 0; letter-spacing: 0.3px; }
+  header .controls { margin-left: auto; display: flex; gap: 8px; }
+  button, select, input[type="text"] {
+    background: var(--panel);
+    color: var(--ink);
+    border: 1px solid #2a3244;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 14px;
+  }
+  button:hover { border-color: #3b465f; cursor: pointer; }
+  button.primary { border-color: var(--accent); }
+  button.danger { border-color: var(--danger); color: #ffdede; }
+  main {
+    display: grid;
+    grid-template-columns: 360px 1fr 360px;
+    gap: 12px;
+    padding: 12px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid #222836;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .panel h2 {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0;
+    padding: 8px 10px;
+    background: #111624;
+    border-bottom: 1px solid #222836;
+    letter-spacing: 0.2px;
+  }
+  #log {
+    height: 64vh;
+    overflow: auto;
+    padding: 10px;
+    white-space: pre-wrap;
+  }
+  #choices { padding: 10px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .badge { font-size: 12px; padding: 2px 6px; border: 1px solid #2a3244; border-radius: 999px; margin-left: 6px; color: var(--muted); }
+  .statline { color: var(--muted); font-size: 13px; }
+  .entity { border-bottom: 1px dashed #2a3244; padding: 8px 10px; }
+  .entity h3 { margin: 0; font-size: 14px; display: flex; justify-content: space-between; align-items: baseline; }
+  .entity small { color: var(--muted); }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .kv { background: #111624; border: 1px solid #222836; border-radius: 6px; padding: 6px 8px; font-size: 12px; }
+  #map { padding: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 13px; color: var(--muted); }
+  .hr { height: 1px; background: #222836; margin: 6px 0 8px; }
+  .muted { color: var(--muted); }
+  .ok { color: var(--ok); }
+  .warn { color: var(--warn); }
+  .danger { color: var(--danger); }
+  .hidden { display:none; }
+  a.link { color: var(--accent); text-decoration: none; }
+  .code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; background: #0e1320; padding: 2px 4px; border-radius: 4px; border: 1px solid #20283a; }
+  footer { color: var(--muted); font-size: 12px; padding: 8px 12px; text-align: center; border-top: 1px solid #222836; }
+  @media (max-width: 1100px) {
+    main { grid-template-columns: 1fr; }
+    #log { height: auto; max-height: 60vh; }
+  }
+</style>
 </head>
 <body>
-  <div id="overlay">
-    <div id="card">
-      <h1>Fish Duel P2P</h1>
-      <p>1v1 browser duel. Left click throws a fish. Right click swings a giant baguette. Three hits and you lose.</p>
-      <p>Move with <code>WASD</code>, look with mouse. <code>R</code> to respawn, <code>Esc</code> to unlock cursor, <code>N</code> to mute.</p>
-      <p>Share the link shown in the top right to invite exactly one opponent. No logins, no popups.</p>
-      <button id="startBtn">Start</button>
-      <div id="footerHint">Pointer Lock and Audio require a click to start.</div>
-    </div>
+<header>
+  <h1>Lair of the Lamb - a compact, offline adaptation</h1>
+  <div id="clock" class="statline"></div>
+  <div class="controls">
+    <button id="btnSave">Save</button>
+    <button id="btnLoad">Load</button>
+    <button id="btnReset" class="danger">Reset</button>
   </div>
+</header>
 
-  <div id="ui">
-    <div id="hud"></div>
-    <div id="status" class="pill">
-      <span id="connState">Idle</span>
-      <span id="shareLink"></span>
-      <button id="copyBtn" class="btn" title="Copy link">Copy</button>
-      <button id="muteBtn" class="btn" title="Toggle audio">Mute</button>
-    </div>
-    <div id="center"><div id="crosshair"></div></div>
-  </div>
+<main>
+  <section class="panel" id="partyPanel">
+    <h2>Party</h2>
+    <div id="party"></div>
+  </section>
 
-  <div id="toast"></div>
+  <section class="panel">
+    <h2>Log</h2>
+    <div id="log"></div>
+    <div class="hr"></div>
+    <div id="choices"></div>
+  </section>
 
-  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
-  <script>
-  // Utils
-  const randId = (n=6)=> Array.from(crypto.getRandomValues(new Uint8Array(n))).map(x=> (x%36).toString(36)).join('');
-  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-  const lerp=(a,b,t)=>a+(b-a)*t;
+  <section class="panel">
+    <h2>Map and Status</h2>
+    <div id="map"></div>
+    <div class="hr"></div>
+    <div id="status"></div>
+  </section>
+</main>
 
-  // URL room
-  const ensureRoomUrl = ()=>{
-    const url = new URL(location.href);
-    if (!url.hash) { url.hash = 'r-' + randId(8); history.replaceState(null, '', url.toString()); }
-    return location.hash.slice(1);
-  };
+<footer>
+  This fan adaptation is for personal use. All room names, core ideas, and encounter structure are based on the uploaded module. See the chat message for attribution.
+</footer>
 
-  // Audio
-  const SFX = (()=>{
-    const ctx = new (window.AudioContext||window.webkitAudioContext)();
-    let muted = false;
-    const env = (f=440, d=.12, type='square', g=.06)=>{
-      if (muted) return { stop:()=>{} };
-      const t = ctx.currentTime, o = ctx.createOscillator(), gain = ctx.createGain();
-      o.type = type; o.frequency.value = f;
-      gain.gain.setValueAtTime(0, t);
-      gain.gain.linearRampToValueAtTime(g, t+.01);
-      gain.gain.exponentialRampToValueAtTime(.0001, t+d);
-      o.connect(gain); gain.connect(ctx.destination); o.start(t); o.stop(t+d+.05);
-      return o;
-    };
-    return { ctx, get muted(){return muted}, toggle(){ return (muted=!muted); }, hit(){env(190,.08,'sawtooth',.08)}, throw(){env(720,.05,'triangle',.04)}, swing(){env(340,.04,'square',.05)}, lose(){env(110,.6,'sine',.12)}, win(){env(520,.5,'triangle',.12)} };
-  })();
+<script>
+/* Utility */
+const rnd = (n) => Math.floor(Math.random()*n);
+const d = (s) => {
+  // simple dice roller like "1d6", "3d6", "1d6+2", returns integer
+  const m = String(s).match(/(\d+)d(\d+)([+-]\d+)?/i);
+  if (!m) return 0;
+  const c = parseInt(m[1],10);
+  const f = parseInt(m[2],10);
+  const add = m[3] ? parseInt(m[3],10) : 0;
+  let t=0;
+  for (let i=0;i<c;i++) t += 1 + rnd(f);
+  return t + add;
+};
+const clone = (x) => JSON.parse(JSON.stringify(x));
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+const fmt = (n) => Math.round(n*10)/10;
 
-  // DOM
-  const overlay = document.getElementById('overlay');
-  const startBtn = document.getElementById('startBtn');
-  const hud = document.getElementById('hud');
-  const shareLinkEl = document.getElementById('shareLink');
-  const connStateEl = document.getElementById('connState');
-  const copyBtn = document.getElementById('copyBtn');
-  const muteBtn = document.getElementById('muteBtn');
-  const toast = document.getElementById('toast');
-  const showToast = (msg)=>{ toast.textContent = msg; toast.style.display='block'; setTimeout(()=> toast.style.display='none', 1500); };
+/* Data tables (pared and adapted) */
+const genders = [
+  {label:"Boy", range:[1,2], age: ()=> d("1d8")+6, child:true},
+  {label:"Girl", range:[3,4], age: ()=> d("1d8")+6, child:true},
+  {label:"Man", range:[5,11], age: ()=> d("1d20")+14, child:false},
+  {label:"Woman", range:[12,18], age: ()=> d("1d20")+14, child:false},
+  {label:"Non-binary", range:[19,20], age: ()=> d("1d20")+14, child:false},
+];
+const appearances = ["Athletic","Beautiful","Boney","Brawny","Brutish","Delicate","Disfigured","Gorgeous","Grizzled","Handsome","Large","Pale","Petite","Plump","Short","Slender","Statuesque","Swarthy","Tall","Willowy"];
+const personalities = ["Cautious","Cheerful","Cynical","Energetic","Formal","Gloomy","Heartless","Honorable","Irate","Jocular","Militaristic","Noble","Passionate","Proud","Scheming","Serene","Smug","Spacey","Caring","Unhinged"];
 
-  // Three core
-  let scene, camera, renderer, clock;
-  let local = { hp:3, alive:true, model:null, baguette:null };
-  let remote = { hp:3, alive:true, model:null };
-  const projectiles = [];
-  const world = { size: 80 };
+// Profession table 1..100 (adapted exactly as labels, no mechanics).
+const professions = {
+  1:"Charcoal Burner",2:"Beggar",3:"Burglar",4:"Deserter",5:"Drunkard",6:"Farmer, Onion",7:"Farmer, Chicken",8:"Farmer, Pumpkin",9:"Poacher",10:"Innkeeper",
+  11:"Link Boy",12:"Lumberjack",13:"Monk or Nun",14:"Milkmaid",15:"Miller",16:"Miner",17:"Peasant",18:"Shepherd",19:"Swineherd",20:"Tanner",
+  21:"Thug",22:"Actor",23:"Alchemist",24:"Animal Handler",25:"Architect",26:"Apothecary",27:"Armorer",28:"Ascetic",29:"Astrologer",30:"Astronomer",
+  31:"Bandit",32:"Baker",33:"Banker",34:"Barber-Surgeon",35:"Bartender",36:"Black Marketeer",37:"Blacksmith",38:"Brewer",39:"Bureaucrat",40:"Butcher",
+  41:"Butler",42:"Carpenter",43:"Cartwright",44:"Chandler",45:"Choirboy",46:"Clerk",47:"Cobbler",48:"Cook",49:"Cooper",50:"Cultist",
+  51:"Dancer",52:"Drug Dealer",53:"Dyer",54:"Engineer",55:"Fanatic",56:"Fashion Designer",57:"Fisher",58:"Fool",59:"Gambler",60:"Gardener",
+  61:"Geologist",62:"Glassblower",63:"Gongfarmer",64:"Graverobber",65:"Fraudster",66:"Hatter",67:"Herald",68:"Herbalist",69:"Jeweler",70:"Locksmith",
+  71:"Mason",72:"Minstrel",73:"Paramour",74:"Moneylender",75:"Painter",76:"Perfumer",77:"Philosopher",78:"Pickpocket",79:"Pissprophet",80:"Poacher",
+  81:"Poet",82:"Porter",83:"Potter",84:"Accountant",85:"Rag and Bone Man",86:"Rat Catcher",87:"Sailor",88:"Scribe",89:"Scullion",90:"Sculptor",
+  91:"Servant",92:"Slaver",93:"Squire",94:"Stay-at-Home Parent",95:"Storyteller",96:"Tailor",97:"Tax Collector",98:"Torturer",99:"Weaponsmith",100:"Wet Nurse"
+};
 
-  // Shared geometries/materials for fish (no per-shot allocations)
-  let GEO, MAT;
+/* Core game state */
+const GAME = {
+  minute: 0, // time since start
+  party: [],
+  inventoryNote: "Without a bag, each character can carry 2 items. All start naked. One starts with a knife.",
+  light: { active: false, minutesLeft: 0 },
+  location: "1_BOWLS",
+  roomsVisited: {},
+  lambAlive: true,
+  lambLocation: "9_FOUNTAIN",
+  noise: 0, // escalates encounters
+  rngSeed: Math.random(),
+  firstTurnResolved: false,
+  history: [],
+  flags: {},
+};
 
-  function setupThree() {
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0b0f14);
+function mod(score){ return Math.floor((score-10)/2); }
 
-    camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 500);
-    camera.position.set(0, 1.7, 6);
+function rollAbility(){
+  // classic 3d6
+  return d("3d6");
+}
 
-    renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
-    renderer.setSize(innerWidth, innerHeight);
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-    document.body.appendChild(renderer.domElement);
-
-    clock = new THREE.Clock();
-
-    const hemi = new THREE.HemisphereLight(0xa0d8ff, 0x203040, 0.6); scene.add(hemi);
-    const dir = new THREE.DirectionalLight(0xffffff, .7); dir.position.set(10,20,10); scene.add(dir);
-
-    const g = new THREE.PlaneGeometry(world.size, world.size, 32, 32);
-    const grid = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color:0x12202c, metalness:.2, roughness:.8 }));
-    grid.rotation.x = -Math.PI/2; scene.add(grid);
-    const gridHelper = new THREE.GridHelper(world.size, 32, 0x1e90ff, 0x1b3a52); gridHelper.position.y = 0.01; scene.add(gridHelper);
-
-    const wmat = new THREE.MeshStandardMaterial({ color:0x0f2a3a, metalness:.1, roughness:.9 });
-    const wallGeo = new THREE.BoxGeometry(world.size, 4, 0.5);
-    const wall1 = new THREE.Mesh(wallGeo, wmat); wall1.position.set(0,2,world.size/2); scene.add(wall1);
-    const wall2 = wall1.clone(); wall2.position.set(0,2,-world.size/2); scene.add(wall2);
-    const wall3 = new THREE.Mesh(new THREE.BoxGeometry(0.5,4,world.size), wmat); wall3.position.set(world.size/2,2,0); scene.add(wall3);
-    const wall4 = wall3.clone(); wall4.position.set(-world.size/2,2,0); scene.add(wall4);
-
-    local.baguette = makeBaguette();
-    local.baguette.position.set(0.4, -0.4, -0.8);
-    local.baguette.rotation.set(0.3, 0.2, 0.4);
-    camera.add(local.baguette);
-    scene.add(camera);
-
-    remote.model = makeAvatar(0x49a8ff); remote.model.visible = false; scene.add(remote.model);
-
-    scene.fog = new THREE.Fog(0x0b0f14, 40, 140);
-    window.addEventListener('resize', onResize);
-
-    // init shared fish assets once
-    GEO = {
-      body: new THREE.SphereGeometry(0.18, 16, 12),
-      tail: new THREE.ConeGeometry(0.12, 0.28, 12),
-      fin:  new THREE.ConeGeometry(0.08, 0.16, 10),
-      eye:  new THREE.SphereGeometry(0.03, 8, 6)
-    };
-    MAT = {
-      body: new THREE.MeshStandardMaterial({ color:0x3ea7ff, metalness:.3, roughness:.4 }),
-      tail: new THREE.MeshStandardMaterial({ color:0x2b6fb0, metalness:.2, roughness:.6 }),
-      fin:  new THREE.MeshStandardMaterial({ color:0x5fc0ff }),
-      eye:  new THREE.MeshStandardMaterial({ color:0x000000 })
-    };
+function makePeasant(i){
+  // Demographic
+  const r = 1 + rnd(20);
+  const g = genders.find(g => r >= g.range[0] && r <= g.range[1]);
+  // Stats
+  let stats = {str: rollAbility(), dex: rollAbility(), con: rollAbility(), int: rollAbility(), wis: rollAbility(), cha: rollAbility()};
+  // Small Stature rule if child
+  let small = false;
+  if (g.child){
+    small = true;
+    // switch Str with lowest ability score
+    const entries = Object.entries(stats);
+    let minK = entries.reduce((a,b)=> (a[1] <= b[1] ? a : b))[0];
+    const tmp = stats.str; stats.str = stats[minK]; stats[minK] = tmp;
   }
-
-  function onResize(){ camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); }
-
-  // Models
-  function makeAvatar(color){
-    const group = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 1.1, 8, 16), new THREE.MeshStandardMaterial({ color, metalness:.1, roughness:.7 }));
-    body.position.y = 1.1; group.add(body);
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.28, 16, 12), new THREE.MeshStandardMaterial({ color:0xffffff })); head.position.y = 2; group.add(head);
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 8), new THREE.MeshStandardMaterial({ color:0x1e90ff })); eye.position.set(0.08, 2.05, 0.25); group.add(eye);
-    const eye2 = eye.clone(); eye2.position.x = -0.08; group.add(eye2);
-    return group;
-  }
-
-  // Projectile pool (recycle meshes)
-  const fishPool = [];
-  function acquireFish(){
-    if (fishPool.length) { const m = fishPool.pop(); m.visible = true; return m; }
-    const fish = new THREE.Group();
-    const body = new THREE.Mesh(GEO.body, MAT.body); body.scale.set(1.6,1,1); fish.add(body);
-    const tail = new THREE.Mesh(GEO.tail, MAT.tail); tail.rotation.z = Math.PI; tail.position.x = -0.28; fish.add(tail);
-    const fin  = new THREE.Mesh(GEO.fin, MAT.fin); fin.rotation.z = Math.PI/2; fin.position.set(0.05, -0.08, 0); fish.add(fin);
-    const eye1 = new THREE.Mesh(GEO.eye, MAT.eye); eye1.position.set(0.18, 0.06, 0.11); fish.add(eye1);
-    const eye2 = eye1.clone(); eye2.position.z = -0.11; fish.add(eye2);
-    return fish;
-  }
-  function releaseFish(f){ f.visible=false; scene.remove(f); fishPool.push(f); }
-
-  function makeBaguette(){
-    const g = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.13, 1.0, 8, 16), new THREE.MeshStandardMaterial({ color:0xc78d4a, metalness:.1, roughness:.8 }));
-    body.rotation.z = Math.PI/2; g.add(body);
-    const cutsMat = new THREE.MeshStandardMaterial({ color:0xe4b680, metalness:.1, roughness:.9 });
-    for (let i=0;i<5;i++){ const cut = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.02, 6, 16, Math.PI/2), cutsMat); cut.rotation.x = Math.PI/2; cut.position.x = -0.5 + i*0.25; g.add(cut); }
-    return g;
-  }
-
-  // Input
-  const keys = new Set();
-  let yaw = 0, pitch = 0;
-  let vel = new THREE.Vector3();
-  const pos = new THREE.Vector3(0,1.7, -world.size/4);
-  const up = new THREE.Vector3(0,1,0);
-  const TMP = { forward:new THREE.Vector3(), right:new THREE.Vector3(), acc:new THREE.Vector3(), dir:new THREE.Vector3(), origin:new THREE.Vector3() };
-
-  function lockPointer(){ renderer.domElement.requestPointerLock?.(); }
-  function onMouseMove(e){ if (document.pointerLockElement === renderer.domElement) { const s = 0.0025; yaw -= e.movementX*s; pitch -= e.movementY*s; pitch = clamp(pitch, -Math.PI/2+0.05, Math.PI/2-0.05); } }
-  function onKey(e,down){ if (down) keys.add(e.code); else keys.delete(e.code); if (e.code==='KeyN'&&down) toggleMute(); if (e.code==='KeyR'&&down) respawn(); }
-
-  function dirFromAngles(){ return TMP.dir.set(Math.sin(yaw)*Math.cos(pitch), Math.sin(-pitch), Math.cos(yaw)*Math.cos(pitch)).normalize(); }
-
-  function updateMovement(dt){
-    const speed = (keys.has('ShiftLeft')||keys.has('ShiftRight')) ? 7 : 4.2;
-    const forward = TMP.forward.set(Math.sin(yaw),0,Math.cos(yaw));
-    const right = TMP.right.copy(forward).cross(up).multiplyScalar(-1);
-    const acc = TMP.acc.set(0,0,0);
-    if (keys.has('KeyW')||keys.has('ArrowUp')) acc.add(forward);
-    if (keys.has('KeyS')||keys.has('ArrowDown')) acc.add(forward.clone().multiplyScalar(-1));
-    if (keys.has('KeyA')||keys.has('ArrowLeft')) acc.add(right.clone().multiplyScalar(-1));
-    if (keys.has('KeyD')||keys.has('ArrowRight')) acc.add(right);
-    if (acc.lengthSq()>0) acc.normalize().multiplyScalar(speed);
-    vel.lerp(acc, 1 - Math.exp(-10*dt));
-    pos.addScaledVector(vel, dt);
-    pos.x = clamp(pos.x, -world.size/2+1, world.size/2-1);
-    pos.z = clamp(pos.z, -world.size/2+1, world.size/2-1);
-    camera.position.copy(pos); camera.rotation.set(pitch, yaw, 0, 'ZYX');
-  }
-
-  // Combat
-  let canThrow = true, canSwing = true;
-  function throwFish(owner='me'){
-    if (owner==='me' && !canThrow) return;
-    const fish = acquireFish();
-    const origin = TMP.origin.copy(camera.position);
-    const dir = dirFromAngles();
-    fish.position.copy(origin).addScaledVector(dir, 0.8);
-    const speed = 18; const v = dir.clone().multiplyScalar(speed);
-    scene.add(fish);
-    projectiles.push({ owner, mesh:fish, vel:v, ttl:2.5 });
-    if (owner==='me') { canThrow=false; setTimeout(()=>canThrow=true, 350); SFX.throw(); send({t:'throw', o:origin.toArray(), d:v.toArray()}); }
-  }
-
-  function swingBaguette(owner='me'){
-    if (owner==='me' && !canSwing) return;
-    const startRot = local.baguette.rotation.z; const targetRot = startRot + 1.2; const t0 = performance.now(); const dur = 180;
-    (function anim(){ const u = Math.min(1, (performance.now()-t0)/dur); local.baguette.rotation.z = lerp(targetRot, startRot, (1-u)*(1-u)); if (u<1) requestAnimationFrame(anim); else local.baguette.rotation.z = startRot; })();
-    if (owner==='me') { canSwing=false; setTimeout(()=>canSwing=true, 450); SFX.swing(); if (remoteConnected && remote.alive) { const toEnemy = new THREE.Vector3().copy(remote.model.position).sub(camera.position); const dist = toEnemy.length(); const fwd = dirFromAngles(); const facing = toEnemy.normalize().dot(fwd); if (dist < 2.2 && facing > 0.6) { send({ t:'hit', kind:'melee' }); } } send({t:'swing'}); }
-  }
-
-  function updateProjectiles(dt){
-    for (let i=projectiles.length-1; i>=0; i--){
-      const p = projectiles[i];
-      p.mesh.position.addScaledVector(p.vel, dt);
-      p.mesh.rotation.y += dt*10;
-      p.ttl -= dt;
-      if (Math.abs(p.mesh.position.x) > world.size/2-0.5 || Math.abs(p.mesh.position.z) > world.size/2-0.5) p.ttl=0;
-      if (p.owner==='them' && local.alive) { if (p.mesh.position.distanceTo(camera.position) < 0.7) { onLocalHit('fish'); p.ttl=0; } }
-      if (p.ttl<=0){ releaseFish(p.mesh); projectiles.splice(i,1); }
-    }
-  }
-
-  function onLocalHit(){ if (!local.alive) return; local.hp = Math.max(0, local.hp-1); SFX.hit(); refreshHearts(); if (local.hp<=0){ local.alive=false; SFX.lose(); send({t:'dead'}); showToast('You lose'); } }
-  function onRemoteHit(){ if (!remote.alive) return; remote.hp = Math.max(0, (remote.hp||3)-1); if (remote.hp<=0){ remote.alive=false; SFX.win(); showToast('You win'); } }
-
-  // HUD
-  function refreshHearts(){
-    hud.innerHTML = '';
-    for (let i=0;i<3;i++){
-      const img = document.createElement('img'); img.className='heart'; img.alt='♥';
-      img.src = i < local.hp
-        ? 'data:image/svg+xml;utf8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ff356d"><path d="M12 21s-7.5-4.35-10-8.5C-0.5 8 2.5 4.5 6 6.2c2 .98 3.1 3.1 3.6 3.8.5-.7 1.6-2.82 3.6-3.8 3.5-1.7 6.5 1.8 4 6.3C19.5 16.65 12 21 12 21z"/></svg>`)
-        : 'data:image/svg+xml;utf8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#5b6370" stroke-width="2"><path d="M12 21s-7.5-4.35-10-8.5C-0.5 8 2.5 4.5 6 6.2c2 .98 3.1 3.1 3.6 3.8.5-.7 1.6-2.82 3.6-3.8 3.5-1.7 6.5 1.8 4 6.3C19.5 16.65 12 21 12 21z"/></svg>`);
-      hud.appendChild(img);
-    }
-  }
-
-  // Networking
-  function getPeerOptions(){
-    const iceServers = [ { urls: 'stun:stun.l.google.com:19302' } ];
-    // Optional TURN configuration
-    // You can set a global TURN config via window.TURN_CONFIG = { urls:'turn:your-turn:3478', username:'user', credential:'pass' }
-    // Or via localStorage keys: turnUrl, turnUser, turnPass
-    const turnCfgGlobal = window.TURN_CONFIG;
-    if (turnCfgGlobal && turnCfgGlobal.urls) {
-      iceServers.push({ urls: turnCfgGlobal.urls, username: turnCfgGlobal.username, credential: turnCfgGlobal.credential });
+  // Appearance and personality
+  const app = appearances[rnd(appearances.length)];
+  const per = personalities[rnd(personalities.length)];
+  // Profession
+  let prof = null;
+  if (!small){
+    if (i < 6){
+      const roll = 1 + rnd(20);
+      prof = professions[roll];
     } else {
-      const turnUrl = localStorage.getItem('turnUrl');
-      if (turnUrl) iceServers.push({ urls: turnUrl, username: localStorage.getItem('turnUser') || '', credential: localStorage.getItem('turnPass') || '' });
+      const roll = 1 + rnd(100);
+      prof = professions[roll];
     }
-    return {
-      debug: 2,
-      config: {
-        iceServers,
-        iceTransportPolicy: 'all'
+  }
+  // HP 6 + Con mod (minimum 1)
+  const hpMax = Math.max(1, 6 + mod(stats.con));
+  const c = {
+    id: "P"+(i+1),
+    name: "Peasant "+(i+1),
+    gender: g.label,
+    age: g.age(),
+    small: small,
+    appearance: app,
+    personality: per,
+    profession: prof,
+    stats, profBonus: 1,
+    hp: hpMax, hpMax,
+    ac: 10, // naked
+    items: [],
+    status: { dehydrated: true },
+  };
+  return c;
+}
+
+function startGame(){
+  // seed party
+  GAME.party = [];
+  for (let i=0;i<12;i++) GAME.party.push(makePeasant(i));
+  // give one random a knife
+  const idx = rnd(GAME.party.length);
+  GAME.party[idx].items.push("Knife");
+  log(`Twelve peasants awaken in darkness. One clutches a knife.`);
+  // starting situation
+  renderParty();
+  GAME.location = "1_BOWLS";
+  GAME.roomsVisited[GAME.location] = true;
+  GAME.light.active = false;
+  GAME.light.minutesLeft = 0;
+  GAME.lambAlive = true;
+  GAME.lambLocation = "1_BOWLS"; // it is lumbering in
+  GAME.minute = 0;
+  GAME.noise = 0;
+  GAME.flags = { throneUsed: false };
+  showLocation();
+  presentStartChoices();
+  saveSnapshot();
+}
+
+/* Persistence */
+function saveSnapshot(){
+  const snap = JSON.stringify(GAME);
+  localStorage.setItem("lamb_save", snap);
+}
+function loadSnapshot(){
+  const s = localStorage.getItem("lamb_save");
+  if (!s) return false;
+  const obj = JSON.parse(s);
+  for (const k of Object.keys(GAME)) GAME[k] = obj[k];
+  renderAll();
+  return true;
+}
+function resetSnapshot(){
+  localStorage.removeItem("lamb_save");
+  location.reload();
+}
+
+/* UI */
+function log(msg, cls=""){
+  const el = document.getElementById("log");
+  const div = document.createElement("div");
+  if (cls) div.className = cls;
+  div.innerHTML = msg;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+  GAME.history.push({t: GAME.minute, msg});
+}
+function clearChoices(){
+  document.getElementById("choices").innerHTML = "";
+}
+function choice(label, fn, title=""){
+  const btn = document.createElement("button");
+  btn.textContent = label;
+  if (title) btn.title = title;
+  btn.onclick = fn;
+  document.getElementById("choices").appendChild(btn);
+}
+function renderClock(){
+  const h = Math.floor(GAME.minute/60);
+  const m = GAME.minute%60;
+  const light = GAME.light.active ? `, light ${GAME.light.minutesLeft}m` : "";
+  document.getElementById("clock").textContent = `T+${h}h ${m}m${light}`;
+}
+function renderParty(){
+  const root = document.getElementById("party");
+  root.innerHTML = "";
+  GAME.party.forEach(p => {
+    const div = document.createElement("div");
+    div.className = "entity";
+    const flags = [];
+    if (p.status.dehydrated) flags.push("dehydrated");
+    if (p.small) flags.push("small stature");
+    div.innerHTML = `<h3>${p.name} <small class="muted">${p.gender}, ${p.age}</small></h3>
+      <div class="statline">HP ${p.hp}/${p.hpMax} AC ${p.ac} | STR ${p.stats.str} DEX ${p.stats.dex} CON ${p.stats.con} INT ${p.stats.int} WIS ${p.stats.wis} CHA ${p.stats.cha} <span class="badge">Prof +1</span></div>
+      <div class="statline">${p.appearance} · ${p.personality} ${p.profession ? "· "+p.profession : ""}</div>
+      <div class="row"><div class="kv">Items: ${p.items.join(", ") || "none"}</div><div class="kv">Status: ${flags.join(", ") || "ok"}</div></div>`;
+    root.appendChild(div);
+  });
+}
+function renderStatus(){
+  const s = [];
+  s.push(`Location: <span class="code">${rooms[GAME.location].name}</span>`);
+  s.push(`Noise: ${GAME.noise}`);
+  s.push(`Lamb: ${GAME.lambAlive ? "alive" : "dead"}${GAME.lambAlive ? " in "+rooms[GAME.lambLocation].name : ""}`);
+  s.push(`Light: ${GAME.light.active ? "torch lit" : "darkness"}`);
+  s.push(`<div class="hr"></div><div class="muted">Tip: every loud action risks an encounter. Torches burn for minutes, not hours.</div>`);
+  document.getElementById("status").innerHTML = s.join("<br>");
+}
+function renderMap(){
+  // very compact auto-map display
+  const visited = Object.keys(GAME.roomsVisited);
+  let out = "";
+  out += visited.map(k => `• ${rooms[k].name}`).join("<br>");
+  document.getElementById("map").innerHTML = out || "No rooms mapped.";
+}
+function renderAll(){ renderClock(); renderParty(); renderStatus(); renderMap(); showLocation(); }
+
+/* Mechanics */
+function spendMinutes(n, opts={noise:0}){
+  GAME.minute += n;
+  if (GAME.light.active){
+    GAME.light.minutesLeft -= n;
+    if (GAME.light.minutesLeft <= 0){
+      GAME.light.active = false;
+      GAME.light.minutesLeft = 0;
+      log("Your torch gutters out.", "warn");
+    }
+  }
+  if (opts.noise) GAME.noise += opts.noise;
+  // dehydration countdown
+  if (GAME.minute % 60 === 0){
+    // every hour, dehydration hurts a random peasant 1 HP if dehydrated
+    for (const p of GAME.party){
+      if (p.status.dehydrated){
+        p.hp = Math.max(0, p.hp - 1);
       }
-    };
-  }
-
-  let peer, conn, isHost=false, roomId; let remoteConnected=false;
-  function setupNetworking(){
-    // WebRTC requires http(s). Prevent running from file:// which breaks peers.
-    if (location.protocol === 'file:') {
-      setConnState('Serve via HTTP');
-      showToast('Open via http://localhost or https:// (WebRTC needs a secure context)');
-      return;
     }
+  }
+  // periodic encounter checks
+  rollEncounter();
+  renderClock(); renderParty(); renderStatus();
+}
+function rollEncounter(){
+  // Once per 10 minutes or on big noise spikes
+  if (!GAME.lambAlive && GAME.minute < 5) return; // do not spam at start
+  // A simple chance based on noise
+  const force = GAME.noise >= 3;
+  if (!force && rnd(6) < 3) return; // 50 percent skip unless forced
+  GAME.noise = 0;
+  const roll = 1 + rnd(6);
+  if (GAME.lambAlive){
+    if (roll === 1){
+      // Active: lamb approaches
+      approachLamb();
+    } else if (roll === 2){
+      log("You hear disgusting sounds nearby. Something heavy scrapes stone and snorts.", "muted");
+    } else if (roll === 3){
+      log("Distant grunting and gnawing echoes through the halls.", "muted");
+    } else {
+      // depletion or nothing
+    }
+  } else {
+    // post lamb table, simplified
+    if (roll <= 3){
+      log("You hear quick skittering above. Something small and hungry lurks on the ceiling.", "warn");
+    } else if (roll <= 6){
+      log("Tremors ripple through the masonry, as if something mourns far below.", "muted");
+    }
+  }
+}
+function approachLamb(){
+  // Lamb moves toward the party if not already here
+  if (GAME.lambLocation !== GAME.location){
+    log("A monstrous bulk shoves through a passage nearby. The Lamb is coming.", "danger");
+    GAME.lambLocation = GAME.location;
+  }
+  presentCombatWithLamb();
+}
+function abilityCheck(statName, dc=11, bonus=0){
+  // leader check: highest modifier among living
+  let best = -999;
+  for (const p of GAME.party){ if (p.hp > 0){
+    const m = mod(p.stats[statName]) + (p.status.dehydrated ? -4 : 0) + bonus;
+    if (m > best) best = m;
+  }}
+  const roll = 1 + rnd(20);
+  const total = roll + best;
+  log(`Check ${statName.toUpperCase()} vs ${dc}: d20 ${roll} + ${best >=0?"+":""}${best} = ${total}`);
+  return total >= dc;
+}
 
-    roomId = ensureRoomUrl();
-    const hostId = 'room-' + roomId;
-    const forceClient = /[?&]client=1/.test(location.search);
-    const peerOpts = getPeerOptions();
+function partyAlive(){
+  return GAME.party.some(p => p.hp > 0);
+}
 
-    if (!forceClient) {
-      isHost = true;
-      peer = new Peer(hostId, peerOpts);
-      peer.on('open', ()=>{ setConnState('Waiting'); setShareLink(location.href); });
-      peer.on('connection', c=>{ if (remoteConnected){ c.close(); return; } conn = c; bindConn(); remoteConnected = true; setConnState('Connected'); });
-      peer.on('error', err=>{
-        const msg = String(err||'');
-        if (msg.includes('is taken')) { try{ peer.destroy(); }catch(_){} connectAsClient(hostId, peerOpts); }
-        else { console.warn(err); showToast('Peer error: ' + msg); setConnState('Error'); }
+/* Combat vs Lamb, simplified */
+const LAMB = { ac: 13, hp: 72, bite: {toHit: 7, dmg: ()=> d("3d6")}, crush: {toHit: 7, dmg: ()=> d("3d6")}, fireFear: true };
+function presentCombatWithLamb(){
+  clearChoices();
+  log("The Lamb looms. It weighs more than a wagon and reeks of blood and ammonia.", "danger");
+  choice("Hold torch forward", ()=>{
+    if (GAME.light.active){
+      const scare = rnd(3) === 0 ? "hesitates" : "snorts";
+      log(`In the torchlight, the thing ${scare}. Fire bothers it, but anger beats fear.`);
+    } else {
+      log("You have no flame to brandish.");
+    }
+    combatRound();
+  });
+  choice("Fight", ()=> combatRound());
+  choice("Flee quietly", ()=>{
+    // if dark, need WIS check to find exit
+    const ok = GAME.light.active ? true : abilityCheck("wis", 11);
+    spendMinutes(1, {noise: ok?0:1});
+    if (ok){
+      log("You slip away, hearts pounding.");
+      // lamb stays
+      showExits();
+    } else {
+      log("In the dark you fumble at slick stone. The Lamb surges closer.", "warn");
+      combatRound();
+    }
+  });
+  choice("Create a loud distraction", ()=>{
+    spendMinutes(0, {noise:2});
+    log("You bang on stone and scatter bones. The sound ricochets.");
+    // 50 percent to send lamb the other way
+    if (rnd(2)===0){
+      const prev = GAME.lambLocation;
+      GAME.lambLocation = prev; // stays
+      log("The Lamb is not fooled.");
+      combatRound();
+    } else {
+      log("The Lamb veers away for a moment. You get space to move.", "ok");
+      showExits();
+    }
+  });
+}
+
+function combatRound(){
+  // party attacks first if light, otherwise lamb first
+  const lamb = LAMB;
+  if (GAME.light.active) partyAttack(lamb);
+  if (lamb.hp > 0) lambAttacks();
+  if (!GAME.light.active) partyAttack(lamb);
+  if (lamb.hp <= 0){
+    GAME.lambAlive = false;
+    log("The Lamb collapses in a wet, shuddering heap.", "ok");
+    GAME.flags.lambKilledAt = GAME.minute;
+    // Tremor event
+    log("The ground shivers far below.", "muted");
+    clearChoices();
+    choice("Leave the corpse", showExits);
+    choice("Harvest lambfruit", ()=>{
+      log("You gather clusters of strange nodules hanging in its folds. Some green, a few orange.", "muted");
+      // add items broadly
+      addPartyItem("Nascent Lambfruit x5");
+      addPartyItem("Immature Lambfruit x1");
+      showExits();
+    });
+  } else {
+    presentCombatWithLamb();
+  }
+}
+
+function addPartyItem(it){
+  // put on first character with space
+  const t = GAME.party.find(p => p.items.length < 2);
+  if (t) t.items.push(it);
+}
+
+function bestAttackStat(){
+  // choose STR or DEX based on better mod across party
+  let sMax = -99, dMax = -99;
+  for (const p of GAME.party){
+    if (p.hp <= 0) continue;
+    const s = mod(p.stats.str) + (p.status.dehydrated?-4:0);
+    const de = mod(p.stats.dex) + (p.status.dehydrated?-4:0);
+    if (s>sMax) sMax = s; if (de>dMax) dMax = de;
+  }
+  return dMax > sMax ? {stat:"dex",mod:dMax} : {stat:"str",mod:sMax};
+}
+
+function partyAttack(lamb){
+  // aggregate one attack for the party based on best attacker, very simplified
+  const atk = bestAttackStat();
+  const prof = 1;
+  const toHit = 1 + rnd(20) + atk.mod + prof;
+  log(`Party attack: d20 + best ${atk.stat.toUpperCase()} ${atk.mod>=0?"+":""}${atk.mod} +1 = ${toHit}`);
+  if (toHit >= lamb.ac){
+    const w = hasTorchLit() ? "torch and knife" : "rocks and knife";
+    const dmg = d("1d8")+ (atk.mod>0?atk.mod:0);
+    lamb.hp -= dmg;
+    log(`Hit the Lamb with ${w} for ${dmg} damage. Lamb HP ${Math.max(0,lamb.hp)}/${LAMB.hp}.`, "ok");
+  } else {
+    log("Miss.");
+  }
+}
+
+function hasTorchLit(){
+  return GAME.light.active;
+}
+
+function lambAttacks(){
+  // two attacks if party tries to run past, but here single round with one attack then maybe crush
+  const bite = 1 + rnd(20) + LAMB.bite.toHit;
+  const crush = 1 + rnd(20) + LAMB.crush.toHit;
+  const fig = GAME.party.filter(p => p.hp>0);
+  if (fig.length===0) return;
+  // choose a random target who is alive
+  const target = fig[rnd(fig.length)];
+  if (bite >= (10 + mod(target.stats.dex))){ // simple AC based on DEX only, since naked
+    const dmg = LAMB.bite.dmg();
+    target.hp = Math.max(0, target.hp - dmg);
+    log(`The Lamb bites ${target.name} for ${dmg}.`, "danger");
+  } else {
+    log("The Lamb snaps and misses.");
+  }
+  if (fig.some(p=>p.hp>0)){
+    const t2 = fig[rnd(fig.length)];
+    if (crush >= (10 + mod(t2.stats.dex))){
+      const dmg2 = LAMB.crush.dmg();
+      t2.hp = Math.max(0, t2.hp - dmg2);
+      log(`It slams its bulk down on ${t2.name} for ${dmg2}.`, "danger");
+    } else {
+      log("The bulk crashes down, but you scramble aside.");
+    }
+  }
+  renderParty();
+  if (!partyAlive()){
+    clearChoices();
+    log("Silence. The dungeon keeps its secrets.", "danger");
+  }
+}
+
+/* World and rooms */
+const rooms = {
+  "1_BOWLS": { name: "1 BOWLS", exits: { "E":"1A_FIRST" }, enter: ()=>{
+      if (!GAME.firstTurnResolved){
+        log("Pitch black stone. Three vast bowls hold bound people. Hoofed snorting approaches.");
+        GAME.firstTurnResolved = true;
+      } else {
+        log("You feel the cold rims of stone basins in the dark.");
+      }
+    }},
+  "1A_FIRST": { name: "1A FIRST INTERSECTION", exits: { "E":"2_GOATS", "S":"1B_SECOND", "W":"1_BOWLS" }, enter: ()=>{
+      log("Crossways. Barnyard stink to the east.");
+    }},
+  "1B_SECOND": { name: "1B SECOND INTERSECTION", exits: { "N":"1A_FIRST", "E":"5_LANDING", "S":"1C_THIRD" }, enter: ()=>{
+      log("Stone corridor. Faint light to the east. Vinegar south. Barnyard reek north.");
+    }},
+  "1C_THIRD": { name: "1C THIRD INTERSECTION", exits: { "N":"1B_SECOND", "E":"4_CHESTS", "W":"3_VINEGAR" }, enter: ()=>{
+      log("Junction. Acrid vinegar lingers to the west.");
+    }},
+  "2_GOATS": { name: "2 GOATS", exits: { "W":"1A_FIRST" }, enter: ()=>{
+      if (!GAME.flags.gotGoat){
+        log("Three dead goats and one parched survivor with a bell. Short twine holds it. Hay and a wooden bowl lie here.");
+        action("Untie live goat", ()=>{ GAME.flags.gotGoat=true; log("You free the goat. It follows for now, occasionally jingling."); spendMinutes(1,{noise:1}); });
+        action("Take twine and bell", ()=>{ addPartyItem("Twine"); addPartyItem("Goat Bell"); log("You pocket short lengths of twine and a bell."); renderParty(); });
+        action("Take wooden bowl", ()=>{ addPartyItem("Wooden Bowl"); renderParty(); });
+      } else {
+        log("Goat bones and the smell of hay.");
+      }
+    }},
+  "3_VINEGAR": { name: "3 VINEGAR", exits: { "E":"1C_THIRD" }, enter: ()=>{
+      log("A trough of sour vinegar and another reeking of old milk. An empty wine bottle floats.");
+      action("Collect bottle", ()=>{ addPartyItem("Empty Bottle"); renderParty(); log("You take the bottle."); });
+      action("Taste vinegar", ()=>{ log("Your mouth burns. Not water."); });
+    }},
+  "4_CHESTS": { name: "4 CHESTS", exits: { "W":"1C_THIRD" }, enter: ()=>{
+      log("A locked wooden door yields. Inside: a table with an orange nodule, another chest of lead and iron chained down.");
+      action("Take the orange nodule", ()=>{ if (!GAME.flags.tookImmature){ GAME.flags.tookImmature=true; addPartyItem("Immature Lambfruit"); renderParty(); log("You take the orange fruit."); }});
+      action("Open wooden chest", ()=>{
+        log("Inside: a smiling helmet, one torch, a purple pouch, and a pipe. You gather them.");
+        addPartyItem("Helmet");
+        addPartyItem("Torch");
+        addPartyItem("Purple Lotus x2");
+        addPartyItem("Lotus Pipe");
+        renderParty();
       });
-    } else { connectAsClient(hostId, peerOpts); }
-  }
-  function connectAsClient(hostId, peerOpts){
-    isHost=false;
-    peer = new Peer(undefined, peerOpts);
-    peer.on('open', ()=>{ conn = peer.connect(hostId, { reliable:true }); bindConn(); });
-    peer.on('error', err=>{ console.warn(err); showToast('Peer error: ' + String(err||'')); setConnState('Error'); });
-  }
-  function bindConn(){ conn.on('open', ()=>{ remoteConnected=true; setConnState('Connected'); send({ t:'hello' }); }); conn.on('close', ()=>{ remoteConnected=false; setConnState('Disconnected'); }); conn.on('data', onNetData); }
-  function send(obj){ try{ conn && conn.open && conn.send(obj); } catch(_){} }
-  function setConnState(s){ connStateEl.textContent = s; }
-  function setShareLink(url){ shareLinkEl.textContent = url; }
+      action("Open lead and iron chest", ()=>{
+        log("The chains resist. Removing pins gives you headaches. Inside something stirs, hungry for flesh. Best left sealed.");
+      });
+    }},
+  "5_LANDING": { name: "5 LANDING", exits: { "W":"1B_SECOND", "S":"5A_CLOSET", "E":"8_PIT" }, enter: ()=>{
+      if (!GAME.flags.landingInit){
+        log("Huge steel doors are locked from the far side. A lit torch on a pole, a tar-reeking chest with striker beside it.");
+        action("Take lit torch", ()=>{
+          GAME.light.active = true; GAME.light.minutesLeft = 60; log("You take the torch. Light floods thirty feet."); renderStatus();
+        });
+        action("Open tar chest", ()=>{
+          addPartyItem("Fresh Torch");
+          addPartyItem("Vial of Lamp Oil");
+          log("You take a fresh torch and lamp oil.");
+          renderParty();
+        });
+        GAME.flags.landingInit = true;
+      } else {
+        log("The steel doors do not budge. The torch sconce and tar chest remain.");
+      }
+    }},
+  "5A_CLOSET": { name: "5A CLOSET", exits: { "N":"5_LANDING" }, enter: ()=>{
+      log("A broom, and a gong with a small hammer hang here.");
+      action("Bang the gong", ()=>{ log("The sound booms through the halls."); spendMinutes(1,{noise:3}); });
+      action("Take broom", ()=>{ addPartyItem("Broom"); renderParty(); });
+      action("Take gong and hammer", ()=>{ addPartyItem("Gong"); addPartyItem("Hammer"); renderParty(); });
+    }},
+  "6_TUMBLERS": { name: "6 TUMBLERS", exits: { "N":"5_LANDING", "S":"7_THRONE" }, enter: ()=>{
+      log("A fish statue holds four rotating number disks and a lever. A tiny pool of milky liquid pits the floor.");
+      action("Pull lever blindly", ()=>{ log("Grinding echoes. No door opens. Sprays of acid sting your skin. Rinse quickly."); damageParty( d('1d6') ); spendMinutes(1,{noise:2}); });
+      action("Set code 1-2-1-2 then pull", ()=>{ GAME.flags.throneOpen=true; log("Hidden stone shifts. A door slides open to the south."); rooms["6_TUMBLERS"].exits["S"]="7_THRONE"; spendMinutes(1); });
+    }},
+  "7_THRONE": { name: "7 THRONE", exits: { "N":"6_TUMBLERS" }, enter: ()=>{
+      log("A throne of bones and clay. A golden helmet rests here.");
+      if (!GAME.flags.throneUsed){
+        action("Sit on throne", ()=>{
+          const pass = abilityCheck("cha", 15);
+          if (pass){
+            log("Your right hand bulges into a heavy lobster claw. You feel the gaze of a distant god.", "ok");
+            addPartyItem("Lobster Claw");
+          } else {
+            log("Your body swells. You gain girth and an awkward crabby pincer. Carrying things gets harder.");
+          }
+          GAME.flags.throneUsed = true;
+        });
+      }
+      action("Take golden helmet", ()=>{ addPartyItem("Golden Helmet"); renderParty(); });
+    }},
+  "8_PIT": { name: "8 PIT", exits: { "N":"10_BONEPILE", "E":"9_FOUNTAIN", "S":"13_CITY", "W":"5_LANDING" }, enter: ()=>{
+      log("A reeking pit drops forty feet. In the muck below, a ragged woman calls up to you. She begs for rescue and offers a ruby ring.");
+      action("Lower rope if you have one", ()=>{
+        if (hasItem("Rope")){
+          log("You lower a rope and pull Akina up. She thanks you and gives a ring of deep red.");
+          addPartyItem("Ruby Ring of Wisdom");
+          removeItem("Rope");
+          GAME.flags.rescuedAkina=true;
+        } else {
+          log("You have no safe way to reach her.");
+        }
+      });
+    }},
+  "9_FOUNTAIN": { name: "9 FOUNTAIN", exits: { "W":"8_PIT", "N":"11_CRAB", "S":"12_ABACUS" }, enter: ()=>{
+      if (!rooms["9_FOUNTAIN"]._entered){
+        log("A slimy pool glistens. Water drips in a steady pattern: drip, drip drip, drip, drip drip. The first who touches it will be forced under by unseen hands.");
+        rooms["9_FOUNTAIN"]._entered = true;
+        if (GAME.lambAlive){
+          GAME.lambLocation = "9_FOUNTAIN";
+          approachLamb();
+        }
+      } else {
+        log("The pool is still and cold. An armored skeleton lies in the shallows.");
+      }
+      action("Gather water carefully", ()=>{
+        // Ends dehydration but risks haunting if first to touch
+        endDehydration();
+        log("You drink and refill. Your head clears.", "ok");
+        spendMinutes(5);
+      });
+      action("Pray over the skeleton", ()=>{
+        log("You whisper a sincere prayer. The oppressive presence lifts.");
+      });
+    }},
+  "10_BONEPILE": { name: "10 BONE PILE", exits: { "S":"8_PIT", "E":"14_SARC" }, enter: ()=>{
+      log("Hundreds of dense pellets of gnawed bone. Searching may take time.");
+      action("Search for 1 hour", ()=>{
+        spendMinutes(60,{noise:1});
+        const r = 1 + rnd(20);
+        if (r <= 12){
+          log("You find nothing useful.");
+        } else if (r===14){
+          addPartyItem("Battered Shield"); log("A battered shield turns up."); renderParty();
+        } else if (r===15){
+          addPartyItem("Spear"); log("You find a crude spear."); renderParty();
+        } else if (r===16){
+          addPartyItem("Rope"); log("A 30 foot rope, stiff with grime."); renderParty();
+        } else if (r===17){
+          addPartyItem("Torch"); log("You recover a workable torch."); renderParty();
+        } else if (r===18){
+          addPartyItem("Vial of Liquid Hole"); log("You find a small vial of impossibly dark oil."); renderParty();
+        } else if (r===19){
+          addPartyItem("Silver Vein Bracelet"); log("A bracelet like branching veins.", "ok"); renderParty();
+        } else {
+          addPartyItem("Bottle of Fine Wine"); log("A dusty but intact bottle of wine.", "ok"); renderParty();
+        }
+      });
+      action("Crawl north tunnel", ()=>{
+        log("A narrow crawl leads toward a sarcophagus room.");
+        moveTo("14_SARC");
+      });
+    }},
+  "11_CRAB": { name: "11 CRAB MURAL", exits: { "S":"9_FOUNTAIN", "E":"19_PRIESTS" }, enter: ()=>{
+      log("A mural shows a crab groomed in a woman's lap. A friendly rat watches you. The eastern door is locked but simple.");
+    }},
+  "12_ABACUS": { name: "12 ABACUS MURAL", exits: { "N":"9_FOUNTAIN", "S":"13_CITY" }, enter: ()=>{
+      log("An impossible abacus. A sagging roof held by a stout wooden pike. Remove it and the ceiling will collapse.");
+      action("Grab the wooden pike and run", ()=>{
+        if (abilityCheck("dex", 13)){
+          log("You snatch the pike and dash away as stone thunders down.", "ok");
+          addPartyItem("10 foot Pike");
+          // collapse blocks this room
+          rooms["12_ABACUS"].exits = {}; // impassable
+        } else {
+          log("Too slow. The ceiling crashes down. Dust chokes you.");
+          damageParty(d("2d6"));
+          rooms["12_ABACUS"].exits = {};
+        }
+        spendMinutes(1,{noise:3});
+      });
+    }},
+  "13_CITY": { name: "13 CITY MURAL", exits: { "N":"12_ABACUS", "S":"15_CRACK", "E":"16_MOLD", "W":"8_PIT" }, enter: ()=>{
+      log("A painted city beneath waves. A huge crack in the south wall whispers a faint breeze.");
+    }},
+  "14_SARC": { name: "14 SARCOPHAGUS", exits: { "N":"10_BONEPILE" }, enter: ()=>{
+      log("An empty stone coffin with a bladed lid. Mechanisms clack beneath when you move it.");
+      action("Climb inside and lower the lid", ()=>{
+        log("The floor drops open and you tumble into a hidden cell on rugs.", "warn");
+        moveTo("14A_SHADRAKUL");
+      });
+      action("Use sharp lid to cut ropes", ()=>{ log("The edges slice cords cleanly."); });
+    }},
+  "14A_SHADRAKUL": { name: "14A SHADRAKUL", exits: { }, enter: ()=>{
+      log("A robed skeleton sits with an iron book. A crystal goblet balances on its knee. Do not jostle it.");
+      action("Take the black iron spellbook", ()=>{ addPartyItem("Black Iron Spellbook"); renderParty(); });
+      action("Approach the skeleton", ()=>{ log("A skeletal serpent lunges from the bones."); fightSimple("Skeletal Serpent", 12, 7, "1d8"); });
+      action("Climb rugs to the sarcophagus", ()=>{ log("With effort you climb back and push the lid."); moveTo("14_SARC"); });
+    }},
+  "15_CRACK": { name: "15 CRACK", exits: { "N":"13_CITY" }, enter: ()=>{
+      log("A squeeze narrows to a fist-sized view of daylight behind a chicken vendor. He can trade at outrageous prices.");
+      action("Ask Danjo for a candle (20 coins)", ()=>{ log("He laughs. He wants 20 times market rate. You have no coins."); });
+    }},
+  "16_MOLD": { name: "16 MOLD", exits: { "W":"13_CITY", "E":"17_ALTAR" }, enter: ()=>{ log("Mold mats like a curled body, but it is only fungus."); }},
+  "17_ALTAR": { name: "17 ALTAR", exits: { "W":"16_MOLD", "E":"18_SHAFT" }, enter: ()=>{
+      log("A rotten chest spews yellow spores if mishandled. An altar hides a white candle.");
+      action("Carefully open the chest", ()=>{ log("You avoid the worst of the spores and recover a strange photograph and a silver plate image."); addPartyItem("Daguerreotype"); renderParty(); });
+      action("Take white candle", ()=>{ addPartyItem("White Candle"); renderParty(); });
+    }},
+  "18_SHAFT": { name: "18 SHAFT", exits: { "W":"17_ALTAR", "E":"18A_LEDGE" }, enter: ()=>{
+      log("A shattered gazebo lies in a heap under a black shaft. Loops of rotten rope. A block and tackle can be salvaged.");
+      action("Recover block and tackle", ()=>{ addPartyItem("Block and Tackle"); renderParty(); });
+    }},
+  "18A_LEDGE": { name: "18A LEDGE", exits: { "W":"18_SHAFT" }, enter: ()=>{
+      log("A sealed portcullis bars an armored corpse ten feet beyond. A 30 foot rope and an iron spike rest here.");
+      action("Take rope and spike", ()=>{ addPartyItem("Rope"); addPartyItem("Iron Spike"); renderParty(); });
+      action("Loot the corpse through the bars", ()=>{
+        addPartyItem("Sword"); addPartyItem("Bow and Arrows"); addPartyItem("Signet Ring"); addPartyItem("Orb of Indulgence"); renderParty();
+        log("You pull smaller gear through. The armor and helm are too large.");
+      });
+    }},
+  "19_PRIESTS": { name: "19 PRIESTS", exits: { "W":"11_CRAB", "N":"20_POOLS" }, enter: ()=>{
+      log("Three old folk lie smiling in shallow pink pools. Iron spikes hold the east door closed.");
+      action("Touch a priest", ()=>{ log("They scream with one word on their lips: lamb. The others begin to stir."); fightSimple("Priests of the Pool", 10, 2, "1d3"); });
+      action("Taste the pool", ()=>{ log("Sweetness floods your mind. You want nothing more than to lie down in it.", "warn"); });
+    }},
+  "20_POOLS": { name: "20 POOLS", exits: { "S":"19_PRIESTS" }, enter: ()=>{
+      log("Four irregular pools: pink euphoria, a yellow liquid that flashes like day when shaken, milky acid, and a black vomit smoke.");
+      action("Shake yellow pool", ()=>{ log("Daylight flares for seconds. The Lamb hates this."); spendMinutes(0); });
+      action("Bottle some milky acid", ()=>{ if (hasItem("Empty Bottle")){ removeItem("Empty Bottle"); addPartyItem("Bottle of Acid"); renderParty(); log("You bottle a small dose of acid."); } else { log("You need an empty bottle."); } });
+    }},
+};
 
-  function onNetData(msg){
-    switch(msg.t){
-      case 'hello': remote.model.visible = true; break;
-      case 'state': if (!remote.model.visible) remote.model.visible = true; remote.model.position.fromArray(msg.p); remote.model.rotation.y = msg.y; break;
-      case 'throw': { const fish = acquireFish(); fish.position.fromArray(msg.o); const p = { owner:'them', mesh:fish, vel:new THREE.Vector3().fromArray(msg.d), ttl:2.5 }; scene.add(fish); projectiles.push(p); } break;
-      case 'swing': break;
-      case 'hit': onRemoteHit(); break;
-      case 'dead': SFX.win(); showToast('You win'); break;
+function action(label, fn){
+  choice(label, ()=>{ clearChoices(); fn(); showExits(); saveSnapshot(); });
+}
+
+function moveTo(key){
+  GAME.location = key;
+  GAME.roomsVisited[key] = true;
+  spendMinutes(1); // movement
+  showLocation();
+}
+
+function showLocation(){
+  clearChoices();
+  const room = rooms[GAME.location];
+  if (room && room.enter) room.enter();
+  showExits();
+  renderMap();
+  saveSnapshot();
+}
+
+function showExits(){
+  const room = rooms[GAME.location];
+  if (!room) return;
+  const ex = room.exits || {};
+  for (const dir of Object.keys(ex)){
+    choice(`Go ${dir} to ${rooms[ex[dir]].name}`, (()=> ()=> moveTo(ex[dir]))());
+  }
+  // common actions
+  if (hasItem("Torch") && !GAME.light.active){
+    choice("Light a torch", ()=>{ removeItem("Torch"); GAME.light.active=true; GAME.light.minutesLeft=60; log("You light a torch. It should last about an hour."); renderStatus(); });
+  }
+  if (GAME.light.active){
+    choice("Douse torch", ()=>{ GAME.light.active=false; log("You douse the torch."); renderStatus(); });
+  }
+}
+
+function hasItem(name){
+  return GAME.party.some(p => p.items.includes(name));
+}
+function removeItem(name){
+  for (const p of GAME.party){
+    const i = p.items.indexOf(name);
+    if (i>=0){ p.items.splice(i,1); return true; }
+  }
+  return false;
+}
+
+function endDehydration(){
+  for (const p of GAME.party){ p.status.dehydrated=false; }
+  renderParty();
+}
+
+function damageParty(n){
+  // distribute damage randomly to a living member
+  const alive = GAME.party.filter(p=>p.hp>0);
+  if (alive.length===0) return;
+  const t = alive[rnd(alive.length)];
+  t.hp = Math.max(0, t.hp - n);
+  renderParty();
+}
+
+function fightSimple(name, ac, toHit, dmgDice){
+  log(`Combat starts vs ${name}.`, "warn");
+  // one round, very simple
+  // party strike
+  const atk = bestAttackStat();
+  const toHitRoll = 1 + rnd(20) + atk.mod + 1;
+  if (toHitRoll >= ac){
+    log(`You strike first. The ${name} is defeated or driven off.`,"ok");
+  } else {
+    const alive = GAME.party.filter(p=>p.hp>0);
+    if (alive.length){
+      const t = alive[rnd(alive.length)];
+      const hit = 1 + rnd(20) + toHit;
+      if (hit >= (10 + mod(t.stats.dex))){
+        const dmg = d(dmgDice);
+        t.hp = Math.max(0, t.hp - dmg);
+        log(`${name} hits ${t.name} for ${dmg}.`, "danger");
+      } else {
+        log(`${name} misses.`);
+      }
     }
   }
+}
 
-  // Loop
-  let lastSend = 0;
-  function loop(){
-    const dt = Math.min(0.05, clock.getDelta());
-    updateMovement(dt);
-    updateProjectiles(dt);
-    const now = performance.now();
-    if (remoteConnected && now - lastSend > 50){ send({ t:'state', p:[camera.position.x, camera.position.y, camera.position.z], y: yaw }); lastSend = now; }
-    renderer.render(scene, camera);
-    requestAnimationFrame(loop);
-  }
+/* Start choices */
+function presentStartChoices(){
+  clearChoices();
+  log("The Lamb lumbers into the bowl room.", "danger");
+  choice("Hide among the bowls", ()=>{
+    spendMinutes(10);
+    log("You lie still while it eats one of the bound victims. It is distracted for a while.", "muted");
+    GAME.lambLocation = "9_FOUNTAIN";
+    showExits();
+  });
+  choice("Flee noisily", ()=>{
+    spendMinutes(0,{noise:2});
+    const ok = abilityCheck("wis", 11);
+    if (ok){
+      log("You blunder into the passage, clattering in panic. The Lamb charges after you.", "warn");
+      GAME.lambLocation = GAME.location;
+      approachLamb();
+    } else {
+      log("In terror you hit stone and flounder. The Lamb is upon you.", "danger");
+      approachLamb();
+    }
+  });
+  choice("Slip away quietly", ()=>{
+    spendMinutes(1);
+    log("You move slowly and carefully. In the dark you find a doorway.");
+    showExits();
+  });
+}
 
-  // Controls
-  function onClick(e){ if (e.button===0) throwFish('me'); if (e.button===2) swingBaguette('me'); }
-  function onContext(e){ e.preventDefault(); }
-  function respawn(){ local.hp=3; local.alive=true; refreshHearts(); showToast('Respawned'); pos.set(0,1.7, -world.size/4); yaw=0; pitch=0; }
-  function toggleMute(){ const m = SFX.toggle(); muteBtn.textContent = m? 'Unmute':'Mute'; }
+/* Hook up controls */
+document.getElementById("btnSave").onclick = ()=>{ saveSnapshot(); log("Saved."); };
+document.getElementById("btnLoad").onclick = ()=>{ if (loadSnapshot()) log("Loaded save."); else log("No save found."); };
+document.getElementById("btnReset").onclick = ()=>{ if (confirm("Reset the game state?")) resetSnapshot(); };
 
-  copyBtn.addEventListener('click', async()=>{ try{ await navigator.clipboard.writeText(location.href); showToast('Link copied'); } catch(_){ showToast('Copy failed'); } });
-  muteBtn.addEventListener('click', toggleMute);
+/* Boot */
+startGame();
+renderAll();
 
-  function start(){
-    overlay.style.display = 'none';
-    setupThree();
-    refreshHearts();
-    renderer.domElement.addEventListener('click', onClick);
-    renderer.domElement.addEventListener('contextmenu', onContext);
-    renderer.domElement.addEventListener('mousedown', ()=>{ if (document.pointerLockElement !== renderer.domElement) lockPointer(); });
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('keydown', e=>onKey(e,true));
-    window.addEventListener('keyup', e=>onKey(e,false));
-    if (SFX.ctx.state === 'suspended') SFX.ctx.resume();
-    setupNetworking();
-    setShareLink(location.href);
-    remote.model.position.set(0,0,-2);
-    clock.start();
-    loop();
-  }
-  startBtn.addEventListener('click', start);
-
-  const room = ensureRoomUrl();
-  setShareLink(location.href);
-
-  </script>
+</script>
 </body>
 </html>
