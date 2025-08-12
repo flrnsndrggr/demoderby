@@ -1,0 +1,923 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lair of the Lamb - Standalone</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #151922;
+    --ink: #e6e6e6;
+    --muted: #9aa3b2;
+    --accent: #7cc4ff;
+    --danger: #ff6b6b;
+    --ok: #73e2a7;
+    --warn: #ffd166;
+  }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    line-height: 1.35;
+  }
+  header {
+    padding: 12px 16px;
+    background: #0b0e13;
+    border-bottom: 1px solid #222836;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 3;
+  }
+  header h1 { font-size: 18px; margin: 0; letter-spacing: 0.3px; }
+  header .controls { margin-left: auto; display: flex; gap: 8px; }
+  button, select, input[type="text"] {
+    background: var(--panel);
+    color: var(--ink);
+    border: 1px solid #2a3244;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 14px;
+  }
+  button:hover { border-color: #3b465f; cursor: pointer; }
+  button.primary { border-color: var(--accent); }
+  button.danger { border-color: var(--danger); color: #ffdede; }
+  main {
+    display: grid;
+    grid-template-columns: 360px 1fr 360px;
+    gap: 12px;
+    padding: 12px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid #222836;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .panel h2 {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0;
+    padding: 8px 10px;
+    background: #111624;
+    border-bottom: 1px solid #222836;
+    letter-spacing: 0.2px;
+  }
+  #log {
+    height: 64vh;
+    overflow: auto;
+    padding: 10px;
+    white-space: pre-wrap;
+  }
+  #choices { padding: 10px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .badge { font-size: 12px; padding: 2px 6px; border: 1px solid #2a3244; border-radius: 999px; margin-left: 6px; color: var(--muted); }
+  .statline { color: var(--muted); font-size: 13px; }
+  .entity { border-bottom: 1px dashed #2a3244; padding: 8px 10px; }
+  .entity h3 { margin: 0; font-size: 14px; display: flex; justify-content: space-between; align-items: baseline; }
+  .entity small { color: var(--muted); }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .kv { background: #111624; border: 1px solid #222836; border-radius: 6px; padding: 6px 8px; font-size: 12px; }
+  #map { padding: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 13px; color: var(--muted); }
+  .hr { height: 1px; background: #222836; margin: 6px 0 8px; }
+  .muted { color: var(--muted); }
+  .ok { color: var(--ok); }
+  .warn { color: var(--warn); }
+  .danger { color: var(--danger); }
+  .hidden { display:none; }
+  a.link { color: var(--accent); text-decoration: none; }
+  .code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; background: #0e1320; padding: 2px 4px; border-radius: 4px; border: 1px solid #20283a; }
+  footer { color: var(--muted); font-size: 12px; padding: 8px 12px; text-align: center; border-top: 1px solid #222836; }
+  @media (max-width: 1100px) {
+    main { grid-template-columns: 1fr; }
+    #log { height: auto; max-height: 60vh; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Lair of the Lamb - a compact, offline adaptation</h1>
+  <div id="clock" class="statline"></div>
+  <div class="controls">
+    <button id="btnSave">Save</button>
+    <button id="btnLoad">Load</button>
+    <button id="btnReset" class="danger">Reset</button>
+  </div>
+</header>
+
+<main>
+  <section class="panel" id="partyPanel">
+    <h2>Party</h2>
+    <div id="party"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Log</h2>
+    <div id="log"></div>
+    <div class="hr"></div>
+    <div id="choices"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Map and Status</h2>
+    <div id="map"></div>
+    <div class="hr"></div>
+    <div id="status"></div>
+  </section>
+</main>
+
+<footer>
+  This fan adaptation is for personal use. All room names, core ideas, and encounter structure are based on the uploaded module. See the chat message for attribution.
+</footer>
+
+<script>
+/* Utility */
+const rnd = (n) => Math.floor(Math.random()*n);
+const d = (s) => {
+  // simple dice roller like "1d6", "3d6", "1d6+2", returns integer
+  const m = String(s).match(/(\d+)d(\d+)([+-]\d+)?/i);
+  if (!m) return 0;
+  const c = parseInt(m[1],10);
+  const f = parseInt(m[2],10);
+  const add = m[3] ? parseInt(m[3],10) : 0;
+  let t=0;
+  for (let i=0;i<c;i++) t += 1 + rnd(f);
+  return t + add;
+};
+const clone = (x) => JSON.parse(JSON.stringify(x));
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+const fmt = (n) => Math.round(n*10)/10;
+
+/* Data tables (pared and adapted) */
+const genders = [
+  {label:"Boy", range:[1,2], age: ()=> d("1d8")+6, child:true},
+  {label:"Girl", range:[3,4], age: ()=> d("1d8")+6, child:true},
+  {label:"Man", range:[5,11], age: ()=> d("1d20")+14, child:false},
+  {label:"Woman", range:[12,18], age: ()=> d("1d20")+14, child:false},
+  {label:"Non-binary", range:[19,20], age: ()=> d("1d20")+14, child:false},
+];
+const appearances = ["Athletic","Beautiful","Boney","Brawny","Brutish","Delicate","Disfigured","Gorgeous","Grizzled","Handsome","Large","Pale","Petite","Plump","Short","Slender","Statuesque","Swarthy","Tall","Willowy"];
+const personalities = ["Cautious","Cheerful","Cynical","Energetic","Formal","Gloomy","Heartless","Honorable","Irate","Jocular","Militaristic","Noble","Passionate","Proud","Scheming","Serene","Smug","Spacey","Caring","Unhinged"];
+
+// Profession table 1..100 (adapted exactly as labels, no mechanics).
+const professions = {
+  1:"Charcoal Burner",2:"Beggar",3:"Burglar",4:"Deserter",5:"Drunkard",6:"Farmer, Onion",7:"Farmer, Chicken",8:"Farmer, Pumpkin",9:"Poacher",10:"Innkeeper",
+  11:"Link Boy",12:"Lumberjack",13:"Monk or Nun",14:"Milkmaid",15:"Miller",16:"Miner",17:"Peasant",18:"Shepherd",19:"Swineherd",20:"Tanner",
+  21:"Thug",22:"Actor",23:"Alchemist",24:"Animal Handler",25:"Architect",26:"Apothecary",27:"Armorer",28:"Ascetic",29:"Astrologer",30:"Astronomer",
+  31:"Bandit",32:"Baker",33:"Banker",34:"Barber-Surgeon",35:"Bartender",36:"Black Marketeer",37:"Blacksmith",38:"Brewer",39:"Bureaucrat",40:"Butcher",
+  41:"Butler",42:"Carpenter",43:"Cartwright",44:"Chandler",45:"Choirboy",46:"Clerk",47:"Cobbler",48:"Cook",49:"Cooper",50:"Cultist",
+  51:"Dancer",52:"Drug Dealer",53:"Dyer",54:"Engineer",55:"Fanatic",56:"Fashion Designer",57:"Fisher",58:"Fool",59:"Gambler",60:"Gardener",
+  61:"Geologist",62:"Glassblower",63:"Gongfarmer",64:"Graverobber",65:"Fraudster",66:"Hatter",67:"Herald",68:"Herbalist",69:"Jeweler",70:"Locksmith",
+  71:"Mason",72:"Minstrel",73:"Paramour",74:"Moneylender",75:"Painter",76:"Perfumer",77:"Philosopher",78:"Pickpocket",79:"Pissprophet",80:"Poacher",
+  81:"Poet",82:"Porter",83:"Potter",84:"Accountant",85:"Rag and Bone Man",86:"Rat Catcher",87:"Sailor",88:"Scribe",89:"Scullion",90:"Sculptor",
+  91:"Servant",92:"Slaver",93:"Squire",94:"Stay-at-Home Parent",95:"Storyteller",96:"Tailor",97:"Tax Collector",98:"Torturer",99:"Weaponsmith",100:"Wet Nurse"
+};
+
+/* Core game state */
+const GAME = {
+  minute: 0, // time since start
+  party: [],
+  inventoryNote: "Without a bag, each character can carry 2 items. All start naked. One starts with a knife.",
+  light: { active: false, minutesLeft: 0 },
+  location: "1_BOWLS",
+  roomsVisited: {},
+  lambAlive: true,
+  lambLocation: "9_FOUNTAIN",
+  noise: 0, // escalates encounters
+  rngSeed: Math.random(),
+  firstTurnResolved: false,
+  history: [],
+  flags: {},
+};
+
+function mod(score){ return Math.floor((score-10)/2); }
+
+function rollAbility(){
+  // classic 3d6
+  return d("3d6");
+}
+
+function makePeasant(i){
+  // Demographic
+  const r = 1 + rnd(20);
+  const g = genders.find(g => r >= g.range[0] && r <= g.range[1]);
+  // Stats
+  let stats = {str: rollAbility(), dex: rollAbility(), con: rollAbility(), int: rollAbility(), wis: rollAbility(), cha: rollAbility()};
+  // Small Stature rule if child
+  let small = false;
+  if (g.child){
+    small = true;
+    // switch Str with lowest ability score
+    const entries = Object.entries(stats);
+    let minK = entries.reduce((a,b)=> (a[1] <= b[1] ? a : b))[0];
+    const tmp = stats.str; stats.str = stats[minK]; stats[minK] = tmp;
+  }
+  // Appearance and personality
+  const app = appearances[rnd(appearances.length)];
+  const per = personalities[rnd(personalities.length)];
+  // Profession
+  let prof = null;
+  if (!small){
+    if (i < 6){
+      const roll = 1 + rnd(20);
+      prof = professions[roll];
+    } else {
+      const roll = 1 + rnd(100);
+      prof = professions[roll];
+    }
+  }
+  // HP 6 + Con mod (minimum 1)
+  const hpMax = Math.max(1, 6 + mod(stats.con));
+  const c = {
+    id: "P"+(i+1),
+    name: "Peasant "+(i+1),
+    gender: g.label,
+    age: g.age(),
+    small: small,
+    appearance: app,
+    personality: per,
+    profession: prof,
+    stats, profBonus: 1,
+    hp: hpMax, hpMax,
+    ac: 10, // naked
+    items: [],
+    status: { dehydrated: true },
+  };
+  return c;
+}
+
+function startGame(){
+  // seed party
+  GAME.party = [];
+  for (let i=0;i<12;i++) GAME.party.push(makePeasant(i));
+  // give one random a knife
+  const idx = rnd(GAME.party.length);
+  GAME.party[idx].items.push("Knife");
+  log(`Twelve peasants awaken in darkness. One clutches a knife.`);
+  // starting situation
+  renderParty();
+  GAME.location = "1_BOWLS";
+  GAME.roomsVisited[GAME.location] = true;
+  GAME.light.active = false;
+  GAME.light.minutesLeft = 0;
+  GAME.lambAlive = true;
+  GAME.lambLocation = "1_BOWLS"; // it is lumbering in
+  GAME.minute = 0;
+  GAME.noise = 0;
+  GAME.flags = { throneUsed: false };
+  showLocation();
+  presentStartChoices();
+  saveSnapshot();
+}
+
+/* Persistence */
+function saveSnapshot(){
+  const snap = JSON.stringify(GAME);
+  localStorage.setItem("lamb_save", snap);
+}
+function loadSnapshot(){
+  const s = localStorage.getItem("lamb_save");
+  if (!s) return false;
+  const obj = JSON.parse(s);
+  for (const k of Object.keys(GAME)) GAME[k] = obj[k];
+  renderAll();
+  return true;
+}
+function resetSnapshot(){
+  localStorage.removeItem("lamb_save");
+  location.reload();
+}
+
+/* UI */
+function log(msg, cls=""){
+  const el = document.getElementById("log");
+  const div = document.createElement("div");
+  if (cls) div.className = cls;
+  div.innerHTML = msg;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+  GAME.history.push({t: GAME.minute, msg});
+}
+function clearChoices(){
+  document.getElementById("choices").innerHTML = "";
+}
+function choice(label, fn, title=""){
+  const btn = document.createElement("button");
+  btn.textContent = label;
+  if (title) btn.title = title;
+  btn.onclick = fn;
+  document.getElementById("choices").appendChild(btn);
+}
+function renderClock(){
+  const h = Math.floor(GAME.minute/60);
+  const m = GAME.minute%60;
+  const light = GAME.light.active ? `, light ${GAME.light.minutesLeft}m` : "";
+  document.getElementById("clock").textContent = `T+${h}h ${m}m${light}`;
+}
+function renderParty(){
+  const root = document.getElementById("party");
+  root.innerHTML = "";
+  GAME.party.forEach(p => {
+    const div = document.createElement("div");
+    div.className = "entity";
+    const flags = [];
+    if (p.status.dehydrated) flags.push("dehydrated");
+    if (p.small) flags.push("small stature");
+    div.innerHTML = `<h3>${p.name} <small class="muted">${p.gender}, ${p.age}</small></h3>
+      <div class="statline">HP ${p.hp}/${p.hpMax} AC ${p.ac} | STR ${p.stats.str} DEX ${p.stats.dex} CON ${p.stats.con} INT ${p.stats.int} WIS ${p.stats.wis} CHA ${p.stats.cha} <span class="badge">Prof +1</span></div>
+      <div class="statline">${p.appearance} · ${p.personality} ${p.profession ? "· "+p.profession : ""}</div>
+      <div class="row"><div class="kv">Items: ${p.items.join(", ") || "none"}</div><div class="kv">Status: ${flags.join(", ") || "ok"}</div></div>`;
+    root.appendChild(div);
+  });
+}
+function renderStatus(){
+  const s = [];
+  s.push(`Location: <span class="code">${rooms[GAME.location].name}</span>`);
+  s.push(`Noise: ${GAME.noise}`);
+  s.push(`Lamb: ${GAME.lambAlive ? "alive" : "dead"}${GAME.lambAlive ? " in "+rooms[GAME.lambLocation].name : ""}`);
+  s.push(`Light: ${GAME.light.active ? "torch lit" : "darkness"}`);
+  s.push(`<div class="hr"></div><div class="muted">Tip: every loud action risks an encounter. Torches burn for minutes, not hours.</div>`);
+  document.getElementById("status").innerHTML = s.join("<br>");
+}
+function renderMap(){
+  // very compact auto-map display
+  const visited = Object.keys(GAME.roomsVisited);
+  let out = "";
+  out += visited.map(k => `• ${rooms[k].name}`).join("<br>");
+  document.getElementById("map").innerHTML = out || "No rooms mapped.";
+}
+function renderAll(){ renderClock(); renderParty(); renderStatus(); renderMap(); showLocation(); }
+
+/* Mechanics */
+function spendMinutes(n, opts={noise:0}){
+  GAME.minute += n;
+  if (GAME.light.active){
+    GAME.light.minutesLeft -= n;
+    if (GAME.light.minutesLeft <= 0){
+      GAME.light.active = false;
+      GAME.light.minutesLeft = 0;
+      log("Your torch gutters out.", "warn");
+    }
+  }
+  if (opts.noise) GAME.noise += opts.noise;
+  // dehydration countdown
+  if (GAME.minute % 60 === 0){
+    // every hour, dehydration hurts a random peasant 1 HP if dehydrated
+    for (const p of GAME.party){
+      if (p.status.dehydrated){
+        p.hp = Math.max(0, p.hp - 1);
+      }
+    }
+  }
+  // periodic encounter checks
+  rollEncounter();
+  renderClock(); renderParty(); renderStatus();
+}
+function rollEncounter(){
+  // Once per 10 minutes or on big noise spikes
+  if (!GAME.lambAlive && GAME.minute < 5) return; // do not spam at start
+  // A simple chance based on noise
+  const force = GAME.noise >= 3;
+  if (!force && rnd(6) < 3) return; // 50 percent skip unless forced
+  GAME.noise = 0;
+  const roll = 1 + rnd(6);
+  if (GAME.lambAlive){
+    if (roll === 1){
+      // Active: lamb approaches
+      approachLamb();
+    } else if (roll === 2){
+      log("You hear disgusting sounds nearby. Something heavy scrapes stone and snorts.", "muted");
+    } else if (roll === 3){
+      log("Distant grunting and gnawing echoes through the halls.", "muted");
+    } else {
+      // depletion or nothing
+    }
+  } else {
+    // post lamb table, simplified
+    if (roll <= 3){
+      log("You hear quick skittering above. Something small and hungry lurks on the ceiling.", "warn");
+    } else if (roll <= 6){
+      log("Tremors ripple through the masonry, as if something mourns far below.", "muted");
+    }
+  }
+}
+function approachLamb(){
+  // Lamb moves toward the party if not already here
+  if (GAME.lambLocation !== GAME.location){
+    log("A monstrous bulk shoves through a passage nearby. The Lamb is coming.", "danger");
+    GAME.lambLocation = GAME.location;
+  }
+  presentCombatWithLamb();
+}
+function abilityCheck(statName, dc=11, bonus=0){
+  // leader check: highest modifier among living
+  let best = -999;
+  for (const p of GAME.party){ if (p.hp > 0){
+    const m = mod(p.stats[statName]) + (p.status.dehydrated ? -4 : 0) + bonus;
+    if (m > best) best = m;
+  }}
+  const roll = 1 + rnd(20);
+  const total = roll + best;
+  log(`Check ${statName.toUpperCase()} vs ${dc}: d20 ${roll} + ${best >=0?"+":""}${best} = ${total}`);
+  return total >= dc;
+}
+
+function partyAlive(){
+  return GAME.party.some(p => p.hp > 0);
+}
+
+/* Combat vs Lamb, simplified */
+const LAMB = { ac: 13, hp: 72, bite: {toHit: 7, dmg: ()=> d("3d6")}, crush: {toHit: 7, dmg: ()=> d("3d6")}, fireFear: true };
+function presentCombatWithLamb(){
+  clearChoices();
+  log("The Lamb looms. It weighs more than a wagon and reeks of blood and ammonia.", "danger");
+  choice("Hold torch forward", ()=>{
+    if (GAME.light.active){
+      const scare = rnd(3) === 0 ? "hesitates" : "snorts";
+      log(`In the torchlight, the thing ${scare}. Fire bothers it, but anger beats fear.`);
+    } else {
+      log("You have no flame to brandish.");
+    }
+    combatRound();
+  });
+  choice("Fight", ()=> combatRound());
+  choice("Flee quietly", ()=>{
+    // if dark, need WIS check to find exit
+    const ok = GAME.light.active ? true : abilityCheck("wis", 11);
+    spendMinutes(1, {noise: ok?0:1});
+    if (ok){
+      log("You slip away, hearts pounding.");
+      // lamb stays
+      showExits();
+    } else {
+      log("In the dark you fumble at slick stone. The Lamb surges closer.", "warn");
+      combatRound();
+    }
+  });
+  choice("Create a loud distraction", ()=>{
+    spendMinutes(0, {noise:2});
+    log("You bang on stone and scatter bones. The sound ricochets.");
+    // 50 percent to send lamb the other way
+    if (rnd(2)===0){
+      const prev = GAME.lambLocation;
+      GAME.lambLocation = prev; // stays
+      log("The Lamb is not fooled.");
+      combatRound();
+    } else {
+      log("The Lamb veers away for a moment. You get space to move.", "ok");
+      showExits();
+    }
+  });
+}
+
+function combatRound(){
+  // party attacks first if light, otherwise lamb first
+  const lamb = LAMB;
+  if (GAME.light.active) partyAttack(lamb);
+  if (lamb.hp > 0) lambAttacks();
+  if (!GAME.light.active) partyAttack(lamb);
+  if (lamb.hp <= 0){
+    GAME.lambAlive = false;
+    log("The Lamb collapses in a wet, shuddering heap.", "ok");
+    GAME.flags.lambKilledAt = GAME.minute;
+    // Tremor event
+    log("The ground shivers far below.", "muted");
+    clearChoices();
+    choice("Leave the corpse", showExits);
+    choice("Harvest lambfruit", ()=>{
+      log("You gather clusters of strange nodules hanging in its folds. Some green, a few orange.", "muted");
+      // add items broadly
+      addPartyItem("Nascent Lambfruit x5");
+      addPartyItem("Immature Lambfruit x1");
+      showExits();
+    });
+  } else {
+    presentCombatWithLamb();
+  }
+}
+
+function addPartyItem(it){
+  // put on first character with space
+  const t = GAME.party.find(p => p.items.length < 2);
+  if (t) t.items.push(it);
+}
+
+function bestAttackStat(){
+  // choose STR or DEX based on better mod across party
+  let sMax = -99, dMax = -99;
+  for (const p of GAME.party){
+    if (p.hp <= 0) continue;
+    const s = mod(p.stats.str) + (p.status.dehydrated?-4:0);
+    const de = mod(p.stats.dex) + (p.status.dehydrated?-4:0);
+    if (s>sMax) sMax = s; if (de>dMax) dMax = de;
+  }
+  return dMax > sMax ? {stat:"dex",mod:dMax} : {stat:"str",mod:sMax};
+}
+
+function partyAttack(lamb){
+  // aggregate one attack for the party based on best attacker, very simplified
+  const atk = bestAttackStat();
+  const prof = 1;
+  const toHit = 1 + rnd(20) + atk.mod + prof;
+  log(`Party attack: d20 + best ${atk.stat.toUpperCase()} ${atk.mod>=0?"+":""}${atk.mod} +1 = ${toHit}`);
+  if (toHit >= lamb.ac){
+    const w = hasTorchLit() ? "torch and knife" : "rocks and knife";
+    const dmg = d("1d8")+ (atk.mod>0?atk.mod:0);
+    lamb.hp -= dmg;
+    log(`Hit the Lamb with ${w} for ${dmg} damage. Lamb HP ${Math.max(0,lamb.hp)}/${LAMB.hp}.`, "ok");
+  } else {
+    log("Miss.");
+  }
+}
+
+function hasTorchLit(){
+  return GAME.light.active;
+}
+
+function lambAttacks(){
+  // two attacks if party tries to run past, but here single round with one attack then maybe crush
+  const bite = 1 + rnd(20) + LAMB.bite.toHit;
+  const crush = 1 + rnd(20) + LAMB.crush.toHit;
+  const fig = GAME.party.filter(p => p.hp>0);
+  if (fig.length===0) return;
+  // choose a random target who is alive
+  const target = fig[rnd(fig.length)];
+  if (bite >= (10 + mod(target.stats.dex))){ // simple AC based on DEX only, since naked
+    const dmg = LAMB.bite.dmg();
+    target.hp = Math.max(0, target.hp - dmg);
+    log(`The Lamb bites ${target.name} for ${dmg}.`, "danger");
+  } else {
+    log("The Lamb snaps and misses.");
+  }
+  if (fig.some(p=>p.hp>0)){
+    const t2 = fig[rnd(fig.length)];
+    if (crush >= (10 + mod(t2.stats.dex))){
+      const dmg2 = LAMB.crush.dmg();
+      t2.hp = Math.max(0, t2.hp - dmg2);
+      log(`It slams its bulk down on ${t2.name} for ${dmg2}.`, "danger");
+    } else {
+      log("The bulk crashes down, but you scramble aside.");
+    }
+  }
+  renderParty();
+  if (!partyAlive()){
+    clearChoices();
+    log("Silence. The dungeon keeps its secrets.", "danger");
+  }
+}
+
+/* World and rooms */
+const rooms = {
+  "1_BOWLS": { name: "1 BOWLS", exits: { "E":"1A_FIRST" }, enter: ()=>{
+      if (!GAME.firstTurnResolved){
+        log("Pitch black stone. Three vast bowls hold bound people. Hoofed snorting approaches.");
+        GAME.firstTurnResolved = true;
+      } else {
+        log("You feel the cold rims of stone basins in the dark.");
+      }
+    }},
+  "1A_FIRST": { name: "1A FIRST INTERSECTION", exits: { "E":"2_GOATS", "S":"1B_SECOND", "W":"1_BOWLS" }, enter: ()=>{
+      log("Crossways. Barnyard stink to the east.");
+    }},
+  "1B_SECOND": { name: "1B SECOND INTERSECTION", exits: { "N":"1A_FIRST", "E":"5_LANDING", "S":"1C_THIRD" }, enter: ()=>{
+      log("Stone corridor. Faint light to the east. Vinegar south. Barnyard reek north.");
+    }},
+  "1C_THIRD": { name: "1C THIRD INTERSECTION", exits: { "N":"1B_SECOND", "E":"4_CHESTS", "W":"3_VINEGAR" }, enter: ()=>{
+      log("Junction. Acrid vinegar lingers to the west.");
+    }},
+  "2_GOATS": { name: "2 GOATS", exits: { "W":"1A_FIRST" }, enter: ()=>{
+      if (!GAME.flags.gotGoat){
+        log("Three dead goats and one parched survivor with a bell. Short twine holds it. Hay and a wooden bowl lie here.");
+        action("Untie live goat", ()=>{ GAME.flags.gotGoat=true; log("You free the goat. It follows for now, occasionally jingling."); spendMinutes(1,{noise:1}); });
+        action("Take twine and bell", ()=>{ addPartyItem("Twine"); addPartyItem("Goat Bell"); log("You pocket short lengths of twine and a bell."); renderParty(); });
+        action("Take wooden bowl", ()=>{ addPartyItem("Wooden Bowl"); renderParty(); });
+      } else {
+        log("Goat bones and the smell of hay.");
+      }
+    }},
+  "3_VINEGAR": { name: "3 VINEGAR", exits: { "E":"1C_THIRD" }, enter: ()=>{
+      log("A trough of sour vinegar and another reeking of old milk. An empty wine bottle floats.");
+      action("Collect bottle", ()=>{ addPartyItem("Empty Bottle"); renderParty(); log("You take the bottle."); });
+      action("Taste vinegar", ()=>{ log("Your mouth burns. Not water."); });
+    }},
+  "4_CHESTS": { name: "4 CHESTS", exits: { "W":"1C_THIRD" }, enter: ()=>{
+      log("A locked wooden door yields. Inside: a table with an orange nodule, another chest of lead and iron chained down.");
+      action("Take the orange nodule", ()=>{ if (!GAME.flags.tookImmature){ GAME.flags.tookImmature=true; addPartyItem("Immature Lambfruit"); renderParty(); log("You take the orange fruit."); }});
+      action("Open wooden chest", ()=>{
+        log("Inside: a smiling helmet, one torch, a purple pouch, and a pipe. You gather them.");
+        addPartyItem("Helmet");
+        addPartyItem("Torch");
+        addPartyItem("Purple Lotus x2");
+        addPartyItem("Lotus Pipe");
+        renderParty();
+      });
+      action("Open lead and iron chest", ()=>{
+        log("The chains resist. Removing pins gives you headaches. Inside something stirs, hungry for flesh. Best left sealed.");
+      });
+    }},
+  "5_LANDING": { name: "5 LANDING", exits: { "W":"1B_SECOND", "S":"5A_CLOSET", "E":"8_PIT" }, enter: ()=>{
+      if (!GAME.flags.landingInit){
+        log("Huge steel doors are locked from the far side. A lit torch on a pole, a tar-reeking chest with striker beside it.");
+        action("Take lit torch", ()=>{
+          GAME.light.active = true; GAME.light.minutesLeft = 60; log("You take the torch. Light floods thirty feet."); renderStatus();
+        });
+        action("Open tar chest", ()=>{
+          addPartyItem("Fresh Torch");
+          addPartyItem("Vial of Lamp Oil");
+          log("You take a fresh torch and lamp oil.");
+          renderParty();
+        });
+        GAME.flags.landingInit = true;
+      } else {
+        log("The steel doors do not budge. The torch sconce and tar chest remain.");
+      }
+    }},
+  "5A_CLOSET": { name: "5A CLOSET", exits: { "N":"5_LANDING" }, enter: ()=>{
+      log("A broom, and a gong with a small hammer hang here.");
+      action("Bang the gong", ()=>{ log("The sound booms through the halls."); spendMinutes(1,{noise:3}); });
+      action("Take broom", ()=>{ addPartyItem("Broom"); renderParty(); });
+      action("Take gong and hammer", ()=>{ addPartyItem("Gong"); addPartyItem("Hammer"); renderParty(); });
+    }},
+  "6_TUMBLERS": { name: "6 TUMBLERS", exits: { "N":"5_LANDING", "S":"7_THRONE" }, enter: ()=>{
+      log("A fish statue holds four rotating number disks and a lever. A tiny pool of milky liquid pits the floor.");
+      action("Pull lever blindly", ()=>{ log("Grinding echoes. No door opens. Sprays of acid sting your skin. Rinse quickly."); damageParty( d('1d6') ); spendMinutes(1,{noise:2}); });
+      action("Set code 1-2-1-2 then pull", ()=>{ GAME.flags.throneOpen=true; log("Hidden stone shifts. A door slides open to the south."); rooms["6_TUMBLERS"].exits["S"]="7_THRONE"; spendMinutes(1); });
+    }},
+  "7_THRONE": { name: "7 THRONE", exits: { "N":"6_TUMBLERS" }, enter: ()=>{
+      log("A throne of bones and clay. A golden helmet rests here.");
+      if (!GAME.flags.throneUsed){
+        action("Sit on throne", ()=>{
+          const pass = abilityCheck("cha", 15);
+          if (pass){
+            log("Your right hand bulges into a heavy lobster claw. You feel the gaze of a distant god.", "ok");
+            addPartyItem("Lobster Claw");
+          } else {
+            log("Your body swells. You gain girth and an awkward crabby pincer. Carrying things gets harder.");
+          }
+          GAME.flags.throneUsed = true;
+        });
+      }
+      action("Take golden helmet", ()=>{ addPartyItem("Golden Helmet"); renderParty(); });
+    }},
+  "8_PIT": { name: "8 PIT", exits: { "N":"10_BONEPILE", "E":"9_FOUNTAIN", "S":"13_CITY", "W":"5_LANDING" }, enter: ()=>{
+      log("A reeking pit drops forty feet. In the muck below, a ragged woman calls up to you. She begs for rescue and offers a ruby ring.");
+      action("Lower rope if you have one", ()=>{
+        if (hasItem("Rope")){
+          log("You lower a rope and pull Akina up. She thanks you and gives a ring of deep red.");
+          addPartyItem("Ruby Ring of Wisdom");
+          removeItem("Rope");
+          GAME.flags.rescuedAkina=true;
+        } else {
+          log("You have no safe way to reach her.");
+        }
+      });
+    }},
+  "9_FOUNTAIN": { name: "9 FOUNTAIN", exits: { "W":"8_PIT", "N":"11_CRAB", "S":"12_ABACUS" }, enter: ()=>{
+      if (!rooms["9_FOUNTAIN"]._entered){
+        log("A slimy pool glistens. Water drips in a steady pattern: drip, drip drip, drip, drip drip. The first who touches it will be forced under by unseen hands.");
+        rooms["9_FOUNTAIN"]._entered = true;
+        if (GAME.lambAlive){
+          GAME.lambLocation = "9_FOUNTAIN";
+          approachLamb();
+        }
+      } else {
+        log("The pool is still and cold. An armored skeleton lies in the shallows.");
+      }
+      action("Gather water carefully", ()=>{
+        // Ends dehydration but risks haunting if first to touch
+        endDehydration();
+        log("You drink and refill. Your head clears.", "ok");
+        spendMinutes(5);
+      });
+      action("Pray over the skeleton", ()=>{
+        log("You whisper a sincere prayer. The oppressive presence lifts.");
+      });
+    }},
+  "10_BONEPILE": { name: "10 BONE PILE", exits: { "S":"8_PIT", "E":"14_SARC" }, enter: ()=>{
+      log("Hundreds of dense pellets of gnawed bone. Searching may take time.");
+      action("Search for 1 hour", ()=>{
+        spendMinutes(60,{noise:1});
+        const r = 1 + rnd(20);
+        if (r <= 12){
+          log("You find nothing useful.");
+        } else if (r===14){
+          addPartyItem("Battered Shield"); log("A battered shield turns up."); renderParty();
+        } else if (r===15){
+          addPartyItem("Spear"); log("You find a crude spear."); renderParty();
+        } else if (r===16){
+          addPartyItem("Rope"); log("A 30 foot rope, stiff with grime."); renderParty();
+        } else if (r===17){
+          addPartyItem("Torch"); log("You recover a workable torch."); renderParty();
+        } else if (r===18){
+          addPartyItem("Vial of Liquid Hole"); log("You find a small vial of impossibly dark oil."); renderParty();
+        } else if (r===19){
+          addPartyItem("Silver Vein Bracelet"); log("A bracelet like branching veins.", "ok"); renderParty();
+        } else {
+          addPartyItem("Bottle of Fine Wine"); log("A dusty but intact bottle of wine.", "ok"); renderParty();
+        }
+      });
+      action("Crawl north tunnel", ()=>{
+        log("A narrow crawl leads toward a sarcophagus room.");
+        moveTo("14_SARC");
+      });
+    }},
+  "11_CRAB": { name: "11 CRAB MURAL", exits: { "S":"9_FOUNTAIN", "E":"19_PRIESTS" }, enter: ()=>{
+      log("A mural shows a crab groomed in a woman's lap. A friendly rat watches you. The eastern door is locked but simple.");
+    }},
+  "12_ABACUS": { name: "12 ABACUS MURAL", exits: { "N":"9_FOUNTAIN", "S":"13_CITY" }, enter: ()=>{
+      log("An impossible abacus. A sagging roof held by a stout wooden pike. Remove it and the ceiling will collapse.");
+      action("Grab the wooden pike and run", ()=>{
+        if (abilityCheck("dex", 13)){
+          log("You snatch the pike and dash away as stone thunders down.", "ok");
+          addPartyItem("10 foot Pike");
+          // collapse blocks this room
+          rooms["12_ABACUS"].exits = {}; // impassable
+        } else {
+          log("Too slow. The ceiling crashes down. Dust chokes you.");
+          damageParty(d("2d6"));
+          rooms["12_ABACUS"].exits = {};
+        }
+        spendMinutes(1,{noise:3});
+      });
+    }},
+  "13_CITY": { name: "13 CITY MURAL", exits: { "N":"12_ABACUS", "S":"15_CRACK", "E":"16_MOLD", "W":"8_PIT" }, enter: ()=>{
+      log("A painted city beneath waves. A huge crack in the south wall whispers a faint breeze.");
+    }},
+  "14_SARC": { name: "14 SARCOPHAGUS", exits: { "N":"10_BONEPILE" }, enter: ()=>{
+      log("An empty stone coffin with a bladed lid. Mechanisms clack beneath when you move it.");
+      action("Climb inside and lower the lid", ()=>{
+        log("The floor drops open and you tumble into a hidden cell on rugs.", "warn");
+        moveTo("14A_SHADRAKUL");
+      });
+      action("Use sharp lid to cut ropes", ()=>{ log("The edges slice cords cleanly."); });
+    }},
+  "14A_SHADRAKUL": { name: "14A SHADRAKUL", exits: { }, enter: ()=>{
+      log("A robed skeleton sits with an iron book. A crystal goblet balances on its knee. Do not jostle it.");
+      action("Take the black iron spellbook", ()=>{ addPartyItem("Black Iron Spellbook"); renderParty(); });
+      action("Approach the skeleton", ()=>{ log("A skeletal serpent lunges from the bones."); fightSimple("Skeletal Serpent", 12, 7, "1d8"); });
+      action("Climb rugs to the sarcophagus", ()=>{ log("With effort you climb back and push the lid."); moveTo("14_SARC"); });
+    }},
+  "15_CRACK": { name: "15 CRACK", exits: { "N":"13_CITY" }, enter: ()=>{
+      log("A squeeze narrows to a fist-sized view of daylight behind a chicken vendor. He can trade at outrageous prices.");
+      action("Ask Danjo for a candle (20 coins)", ()=>{ log("He laughs. He wants 20 times market rate. You have no coins."); });
+    }},
+  "16_MOLD": { name: "16 MOLD", exits: { "W":"13_CITY", "E":"17_ALTAR" }, enter: ()=>{ log("Mold mats like a curled body, but it is only fungus."); }},
+  "17_ALTAR": { name: "17 ALTAR", exits: { "W":"16_MOLD", "E":"18_SHAFT" }, enter: ()=>{
+      log("A rotten chest spews yellow spores if mishandled. An altar hides a white candle.");
+      action("Carefully open the chest", ()=>{ log("You avoid the worst of the spores and recover a strange photograph and a silver plate image."); addPartyItem("Daguerreotype"); renderParty(); });
+      action("Take white candle", ()=>{ addPartyItem("White Candle"); renderParty(); });
+    }},
+  "18_SHAFT": { name: "18 SHAFT", exits: { "W":"17_ALTAR", "E":"18A_LEDGE" }, enter: ()=>{
+      log("A shattered gazebo lies in a heap under a black shaft. Loops of rotten rope. A block and tackle can be salvaged.");
+      action("Recover block and tackle", ()=>{ addPartyItem("Block and Tackle"); renderParty(); });
+    }},
+  "18A_LEDGE": { name: "18A LEDGE", exits: { "W":"18_SHAFT" }, enter: ()=>{
+      log("A sealed portcullis bars an armored corpse ten feet beyond. A 30 foot rope and an iron spike rest here.");
+      action("Take rope and spike", ()=>{ addPartyItem("Rope"); addPartyItem("Iron Spike"); renderParty(); });
+      action("Loot the corpse through the bars", ()=>{
+        addPartyItem("Sword"); addPartyItem("Bow and Arrows"); addPartyItem("Signet Ring"); addPartyItem("Orb of Indulgence"); renderParty();
+        log("You pull smaller gear through. The armor and helm are too large.");
+      });
+    }},
+  "19_PRIESTS": { name: "19 PRIESTS", exits: { "W":"11_CRAB", "N":"20_POOLS" }, enter: ()=>{
+      log("Three old folk lie smiling in shallow pink pools. Iron spikes hold the east door closed.");
+      action("Touch a priest", ()=>{ log("They scream with one word on their lips: lamb. The others begin to stir."); fightSimple("Priests of the Pool", 10, 2, "1d3"); });
+      action("Taste the pool", ()=>{ log("Sweetness floods your mind. You want nothing more than to lie down in it.", "warn"); });
+    }},
+  "20_POOLS": { name: "20 POOLS", exits: { "S":"19_PRIESTS" }, enter: ()=>{
+      log("Four irregular pools: pink euphoria, a yellow liquid that flashes like day when shaken, milky acid, and a black vomit smoke.");
+      action("Shake yellow pool", ()=>{ log("Daylight flares for seconds. The Lamb hates this."); spendMinutes(0); });
+      action("Bottle some milky acid", ()=>{ if (hasItem("Empty Bottle")){ removeItem("Empty Bottle"); addPartyItem("Bottle of Acid"); renderParty(); log("You bottle a small dose of acid."); } else { log("You need an empty bottle."); } });
+    }},
+};
+
+function action(label, fn){
+  choice(label, ()=>{ clearChoices(); fn(); showExits(); saveSnapshot(); });
+}
+
+function moveTo(key){
+  GAME.location = key;
+  GAME.roomsVisited[key] = true;
+  spendMinutes(1); // movement
+  showLocation();
+}
+
+function showLocation(){
+  clearChoices();
+  const room = rooms[GAME.location];
+  if (room && room.enter) room.enter();
+  showExits();
+  renderMap();
+  saveSnapshot();
+}
+
+function showExits(){
+  const room = rooms[GAME.location];
+  if (!room) return;
+  const ex = room.exits || {};
+  for (const dir of Object.keys(ex)){
+    choice(`Go ${dir} to ${rooms[ex[dir]].name}`, (()=> ()=> moveTo(ex[dir]))());
+  }
+  // common actions
+  if (hasItem("Torch") && !GAME.light.active){
+    choice("Light a torch", ()=>{ removeItem("Torch"); GAME.light.active=true; GAME.light.minutesLeft=60; log("You light a torch. It should last about an hour."); renderStatus(); });
+  }
+  if (GAME.light.active){
+    choice("Douse torch", ()=>{ GAME.light.active=false; log("You douse the torch."); renderStatus(); });
+  }
+}
+
+function hasItem(name){
+  return GAME.party.some(p => p.items.includes(name));
+}
+function removeItem(name){
+  for (const p of GAME.party){
+    const i = p.items.indexOf(name);
+    if (i>=0){ p.items.splice(i,1); return true; }
+  }
+  return false;
+}
+
+function endDehydration(){
+  for (const p of GAME.party){ p.status.dehydrated=false; }
+  renderParty();
+}
+
+function damageParty(n){
+  // distribute damage randomly to a living member
+  const alive = GAME.party.filter(p=>p.hp>0);
+  if (alive.length===0) return;
+  const t = alive[rnd(alive.length)];
+  t.hp = Math.max(0, t.hp - n);
+  renderParty();
+}
+
+function fightSimple(name, ac, toHit, dmgDice){
+  log(`Combat starts vs ${name}.`, "warn");
+  // one round, very simple
+  // party strike
+  const atk = bestAttackStat();
+  const toHitRoll = 1 + rnd(20) + atk.mod + 1;
+  if (toHitRoll >= ac){
+    log(`You strike first. The ${name} is defeated or driven off.`,"ok");
+  } else {
+    const alive = GAME.party.filter(p=>p.hp>0);
+    if (alive.length){
+      const t = alive[rnd(alive.length)];
+      const hit = 1 + rnd(20) + toHit;
+      if (hit >= (10 + mod(t.stats.dex))){
+        const dmg = d(dmgDice);
+        t.hp = Math.max(0, t.hp - dmg);
+        log(`${name} hits ${t.name} for ${dmg}.`, "danger");
+      } else {
+        log(`${name} misses.`);
+      }
+    }
+  }
+}
+
+/* Start choices */
+function presentStartChoices(){
+  clearChoices();
+  log("The Lamb lumbers into the bowl room.", "danger");
+  choice("Hide among the bowls", ()=>{
+    spendMinutes(10);
+    log("You lie still while it eats one of the bound victims. It is distracted for a while.", "muted");
+    GAME.lambLocation = "9_FOUNTAIN";
+    showExits();
+  });
+  choice("Flee noisily", ()=>{
+    spendMinutes(0,{noise:2});
+    const ok = abilityCheck("wis", 11);
+    if (ok){
+      log("You blunder into the passage, clattering in panic. The Lamb charges after you.", "warn");
+      GAME.lambLocation = GAME.location;
+      approachLamb();
+    } else {
+      log("In terror you hit stone and flounder. The Lamb is upon you.", "danger");
+      approachLamb();
+    }
+  });
+  choice("Slip away quietly", ()=>{
+    spendMinutes(1);
+    log("You move slowly and carefully. In the dark you find a doorway.");
+    showExits();
+  });
+}
+
+/* Hook up controls */
+document.getElementById("btnSave").onclick = ()=>{ saveSnapshot(); log("Saved."); };
+document.getElementById("btnLoad").onclick = ()=>{ if (loadSnapshot()) log("Loaded save."); else log("No save found."); };
+document.getElementById("btnReset").onclick = ()=>{ if (confirm("Reset the game state?")) resetSnapshot(); };
+
+/* Boot */
+startGame();
+renderAll();
+
+</script>
+</body>
+</html>
