@@ -1,0 +1,909 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <title>Demolition Derby P2P</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body { margin:0; height:100%; background:#0a0a0a; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+    #game { display:block; width:100vw; height:100vh; background:radial-gradient(1200px 800px at 50% 50%, #19222a 0%, #0d1116 60%, #050607 100%); }
+    .overlay { position:fixed; inset:0; pointer-events:none; }
+    .ui {
+      position:fixed; top:12px; left:12px; display:flex; gap:8px; flex-wrap:wrap;
+      pointer-events:auto; z-index:5;
+    }
+    button, select, input, textarea {
+      background:#131a21; color:#e6f0ff; border:1px solid #2a3744; border-radius:10px; padding:10px 12px;
+      font: 14px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      box-shadow: 0 2px 0 rgba(0,0,0,.3), inset 0 0 0 1px rgba(255,255,255,.02);
+    }
+    button:hover { filter: brightness(1.1); cursor:pointer; }
+    .panel {
+      position:fixed; right:12px; top:12px; width:min(520px, calc(100vw - 24px));
+      background:#0e141a; border:1px solid #2a3744; border-radius:14px; padding:12px; display:none; z-index:6;
+      pointer-events:auto;
+    }
+    .panel h3 { margin:0 0 8px 0; font-size:16px; }
+    .row { display:flex; gap:8px; margin:8px 0; }
+    .row > * { flex:1; }
+    textarea { min-height:84px; resize:vertical; }
+    .badge { display:inline-block; padding:4px 8px; border-radius:999px; background:#14202a; border:1px solid #2a3744; font-size:12px; color:#9ec3ff; }
+    #hud {
+      position:fixed; left:50%; transform:translateX(-50%);
+      bottom:12px; display:flex; gap:14px; align-items:center; pointer-events:none; z-index:4;
+      font-size:14px; color:#c9e0ff; text-shadow:0 1px 0 #000;
+    }
+    .bar { width:160px; height:10px; background:#1a2430; border:1px solid #2a3744; border-radius:999px; overflow:hidden; }
+    .bar > span { display:block; height:100%; background:linear-gradient(90deg, #36d1dc, #5b86e5); width:100%; }
+    .small { font-size:12px; color:#9fb5cc; }
+    .toast {
+      position:fixed; left:50%; transform:translateX(-50%); top:18px; background:#0e141a; border:1px solid #2a3744;
+      color:#d5e8ff; padding:10px 14px; border-radius:999px; z-index:7; display:none;
+    }
+    .help {
+      position:fixed; right:12px; bottom:12px; max-width:min(520px, calc(100vw - 24px));
+      background:#0e141a; border:1px solid #2a3744; border-radius:14px; padding:12px; pointer-events:auto; z-index:6; display:none;
+    }
+    .help pre { white-space:pre-wrap; margin:0; font:12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; color:#cce3ff; }
+    .minimap { position:fixed; right:12px; bottom:12px; width:180px; height:120px; background:#0b1015; border:1px solid #2a3744; border-radius:10px; z-index:2; }
+    /* Touch joystick */
+    #joy {
+      position:fixed; left:14px; bottom:14px; width:128px; height:128px; border-radius:50%;
+      background:rgba(20,30,40,.35); border:1px solid rgba(80,120,160,.35); display:none; z-index:3;
+      pointer-events:auto; touch-action:none;
+    }
+    #joy .knob {
+      position:absolute; left:50%; top:50%; width:52px; height:52px; transform:translate(-50%,-50%);
+      background:rgba(180,210,255,.6); border:1px solid rgba(200,230,255,.7); border-radius:50%; box-shadow: 0 8px 30px rgba(0,0,0,.4);
+    }
+    @media (max-width: 900px) { #joy { display:block; } .minimap { display:none; } }
+  </style>
+</head>
+<body>
+  <canvas id="game" width="1280" height="720"></canvas>
+  <div class="overlay"></div>
+
+  <div class="ui">
+    <button id="btnLocal">Quick Play Local</button>
+    <button id="btnHost">Host Game</button>
+    <button id="btnJoin">Join Game</button>
+    <button id="btnControls">Controls</button>
+    <button id="btnMute">Mute</button>
+  </div>
+
+  <div id="panelHost" class="panel">
+    <h3>Host P2P Session <span class="badge">Manual WebRTC</span></h3>
+    <div class="small">1. Click Generate Offer. 2. Send Offer text to your friend. 3. Paste their Answer below and click Apply.</div>
+    <div class="row"><button id="btnCreateOffer">Generate Offer</button><button id="btnCopyOffer">Copy Offer</button></div>
+    <textarea id="txtOffer" placeholder="Offer will appear here"></textarea>
+    <div class="row"><textarea id="txtAnswerIn" placeholder="Paste remote Answer here"></textarea></div>
+    <div class="row"><button id="btnApplyAnswer">Apply Answer</button><button id="btnCloseHost">Close</button></div>
+    <div class="small" id="hostStatus">Status: idle</div>
+  </div>
+
+  <div id="panelJoin" class="panel">
+    <h3>Join P2P Session <span class="badge">Manual WebRTC</span></h3>
+    <div class="small">1. Paste Host Offer. 2. Click Create Answer. 3. Send your Answer back. 4. Wait for Connected.</div>
+    <textarea id="txtOfferIn" placeholder="Paste Host Offer here"></textarea>
+    <div class="row"><button id="btnCreateAnswer">Create Answer</button><button id="btnCopyAnswer">Copy Answer</button><button id="btnCloseJoin">Close</button></div>
+    <textarea id="txtAnswerOut" placeholder="Your Answer will appear here"></textarea>
+    <div class="small" id="joinStatus">Status: idle</div>
+  </div>
+
+  <div id="hud">
+    <span id="roundText">Round 1</span>
+    <div class="bar"><span id="hpFill" style="width:100%"></span></div>
+    <span id="speedText">0 kmh</span>
+    <span class="badge" id="netBadge" style="display:none">P2P</span>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <div id="help" class="help">
+    <h3 style="margin:0 0 8px 0">Controls</h3>
+    <pre>
+Local 1:  W A S D  boost Shift  handbrake Space
+Local 2:  Arrow keys  boost /  handbrake .
+Pause: P   Restart: R   Minimap: V   Mute: N
+Gamepad: left stick steer, RT throttle, LT brake, A boost
+
+Online:
+Host creates Offer and shares it. Joiner creates Answer and shares it back.
+This runs host authoritative. Online supports 1 v 1. You can still add a local player on the host for couch vs net.
+    </pre>
+  </div>
+
+  <canvas id="minimap" class="minimap" width="180" height="120"></canvas>
+
+  <div id="joy"><div class="knob"></div></div>
+
+<script>
+(() => {
+  // ---------- Utilities ----------
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const rand = (a=1, b=0) => Math.random()*(a-b) + b;
+  const now = () => performance.now();
+  const uid = () => Math.random().toString(36).slice(2, 9);
+  const kmh = v => Math.round(v * 3.6);
+
+  function showToast(msg, dur=1800) {
+    const t = document.getElementById("toast");
+    t.textContent = msg; t.style.display = "block";
+    clearTimeout(showToast._tk);
+    showToast._tk = setTimeout(() => t.style.display = "none", dur);
+  }
+
+  // ---------- Canvas and sizing ----------
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+  let DPR = Math.min(devicePixelRatio || 1, 2);
+  function resize() {
+    DPR = Math.min(devicePixelRatio || 1, 2);
+    canvas.width = Math.floor(innerWidth * DPR);
+    canvas.height = Math.floor(innerHeight * DPR);
+    canvas.style.width = innerWidth + "px";
+    canvas.style.height = innerHeight + "px";
+  }
+  addEventListener("resize", resize, { passive:true });
+  resize();
+
+  // ---------- Input ----------
+  const keys = new Set();
+  const pressed = e => { keys.add(e.key); if (e.key === "n" || e.key === "N") toggleMute(); };
+  const released = e => keys.delete(e.key);
+  addEventListener("keydown", e => { if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].includes(e.key)) e.preventDefault(); pressed(e); });
+  addEventListener("keyup", released);
+
+  // Touch joystick
+  const joy = document.getElementById("joy");
+  const knob = joy.querySelector(".knob");
+  let joyActive = false, joyVec = { x:0, y:0 };
+  function joySet(x, y) {
+    const r = 56; // move radius
+    const mag = Math.hypot(x, y);
+    const k = mag > r ? r / mag : 1;
+    const px = x * k, py = y * k;
+    knob.style.transform = `translate(${px}px, ${py}px) translate(-50%,-50%)`;
+    joyVec.x = clamp(px / r, -1, 1);
+    joyVec.y = clamp(py / r, -1, 1);
+  }
+  function joyReset(){ joyVec.x = joyVec.y = 0; knob.style.transform = "translate(-50%,-50%)"; }
+  joy.addEventListener("pointerdown", e => { joyActive = true; joy.setPointerCapture(e.pointerId); const rect = joy.getBoundingClientRect(); joySet(e.clientX - (rect.left + rect.width/2), e.clientY - (rect.top + rect.height/2)); });
+  joy.addEventListener("pointermove", e => { if(!joyActive) return; const rect = joy.getBoundingClientRect(); joySet(e.clientX - (rect.left + rect.width/2), e.clientY - (rect.top + rect.height/2)); });
+  joy.addEventListener("pointerup", () => { joyActive = false; joyReset(); });
+
+  // Gamepad
+  let gamepadState = { steer:0, throttle:0, brake:0, boost:false, handbrake:false };
+  function pollGamepad() {
+    const pads = navigator.getGamepads?.() || [];
+    const g = pads[0];
+    if (g) {
+      const ax = g.axes[0] || 0; // left stick X
+      const rt = (g.buttons[7]?.value ?? 0); // RT
+      const lt = (g.buttons[6]?.value ?? 0); // LT
+      const a = !!(g.buttons[0]?.pressed); // A
+      const x = !!(g.buttons[2]?.pressed); // X
+      gamepadState.steer = clamp(ax, -1, 1);
+      gamepadState.throttle = clamp(rt, 0, 1);
+      gamepadState.brake = clamp(lt, 0, 1);
+      gamepadState.boost = a;
+      gamepadState.handbrake = x;
+    } else {
+      gamepadState.steer = 0; gamepadState.throttle = 0; gamepadState.brake = 0;
+      gamepadState.boost = false; gamepadState.handbrake = false;
+    }
+  }
+
+  // ---------- Audio ----------
+  const audio = {
+    ctx: null, gain: null, muted: false,
+    hit(time=0){
+      if (this.muted || !this.ctx) return;
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = "square"; o.frequency.setValueAtTime(120, this.ctx.currentTime);
+      g.gain.setValueAtTime(0.25, this.ctx.currentTime);
+      o.connect(g).connect(this.gain);
+      o.start();
+      o.frequency.exponentialRampToValueAtTime(40, this.ctx.currentTime + 0.12 + time*0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + 0.18 + time*0.02);
+      o.stop(this.ctx.currentTime + 0.2 + time*0.02);
+    },
+    engine(intensity=0){
+      if (this.muted || !this.ctx) return;
+      if (!this.noise) {
+        const buf = this.ctx.createBuffer(1, 22050, 44100);
+        const data = buf.getChannelData(0);
+        for (let i=0; i<data.length; i++) data[i] = (Math.random()*2-1)*0.35;
+        const src = this.ctx.createBufferSource(); src.buffer = buf; src.loop = true;
+        const fil = this.ctx.createBiquadFilter(); fil.type = "lowpass"; fil.frequency.value = 600;
+        const g = this.ctx.createGain(); g.gain.value = 0.0;
+        src.connect(fil).connect(g).connect(this.gain);
+        src.start();
+        this.noise = { src, fil, g };
+      }
+      this.noise.fil.frequency.setTargetAtTime(200 + intensity*1200, this.ctx.currentTime, 0.05);
+      this.noise.g.gain.setTargetAtTime(clamp(0.05 + intensity*0.2, 0, 0.35), this.ctx.currentTime, 0.05);
+    }
+  };
+  function initAudio() {
+    if (audio.ctx) return;
+    audio.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    audio.gain = audio.ctx.createGain();
+    audio.gain.gain.value = 0.6;
+    audio.gain.connect(audio.ctx.destination);
+  }
+  function toggleMute() {
+    audio.muted = !audio.muted;
+    document.getElementById("btnMute").textContent = audio.muted ? "Unmute" : "Mute";
+  }
+
+  // ---------- Game Data ----------
+  const ARENA = { w: 2400, h: 1600, wall: 40, friction: 0.98 };
+  const COLORS = ["#7dd3fc","#a7f3d0","#fca5a5","#fde68a","#c4b5fd","#f9a8d4","#93c5fd"];
+  function spawnPoints(n) {
+    const pts = [];
+    const pad = 140, cols = Math.ceil(Math.sqrt(n)), rows = Math.ceil(n/cols);
+    for (let r=0;r<rows;r++){
+      for (let c=0;c<cols;c++){
+        if (pts.length >= n) break;
+        const x = lerp(ARENA.wall+pad, ARENA.w-ARENA.wall-pad, cols===1?0.5:c/(cols-1));
+        const y = lerp(ARENA.wall+pad, ARENA.h-ARENA.wall-pad, rows===1?0.5:r/(rows-1));
+        pts.push({x, y});
+      }
+    }
+    return pts;
+  }
+
+  class Car {
+    constructor(opts) {
+      Object.assign(this, {
+        id: uid(),
+        name: opts.name || "Player",
+        color: opts.color || COLORS[Math.floor(Math.random()*COLORS.length)],
+        x: opts.x || ARENA.w/2,
+        y: opts.y || ARENA.h/2,
+        a: 0, vx: 0, vy: 0, va: 0,
+        radius: 22, length: 68, width: 36,
+        accel: 120, steerSpeed: 2.6, maxSpeed: 42,
+        grip: 0.88, braking: 2.2, hbFriction: 0.9,
+        boost: 0, boostMax: 2.5, boostPower: 1.9,
+        hp: 100, alive: true, score: 0, lastHit: 0
+      });
+    }
+    get speed() { return Math.hypot(this.vx, this.vy); }
+    step(dt, input) {
+      if (!this.alive) return;
+      // Inputs
+      let steer = input.steer || 0;
+      let throttle = input.throttle || 0;
+      let brake = input.brake || 0;
+      const usingBoost = !!input.boost && this.boost > 0;
+
+      // Gamepad or touch adds vector throttle
+      if (input.vec) {
+        const { x, y } = input.vec;
+        steer = x; throttle = -y;
+      }
+
+      const maxV = this.maxSpeed * (usingBoost ? this.boostPower : 1);
+      const targetTurn = steer * this.steerSpeed;
+      this.va = lerp(this.va, targetTurn, 0.18);
+
+      // Forward vector
+      const ca = Math.cos(this.a), sa = Math.sin(this.a);
+      const ax = ca * this.accel * throttle;
+      const ay = sa * this.accel * throttle;
+
+      // Apply forces
+      this.vx += ax * dt;
+      this.vy += ay * dt;
+
+      // Brake
+      if (brake > 0) {
+        this.vx *= (1 - clamp(brake*dt*this.braking, 0, 0.92));
+        this.vy *= (1 - clamp(brake*dt*this.braking, 0, 0.92));
+      }
+
+      // Handbrake
+      if (input.handbrake) {
+        this.vx *= this.hbFriction;
+        this.vy *= this.hbFriction;
+      }
+
+      // Clamp speed
+      const sp = Math.hypot(this.vx, this.vy);
+      if (sp > maxV) { const k = maxV / sp; this.vx *= k; this.vy *= k; }
+
+      // Integrate
+      this.x += this.vx * dt;
+      this.y += this.vy * dt;
+      this.a += this.va * dt;
+
+      // Friction
+      this.vx *= ARENA.friction;
+      this.vy *= ARENA.friction;
+      this.va *= 0.92;
+
+      // Boost drain
+      if (usingBoost) this.boost = Math.max(0, this.boost - dt);
+
+      // Wall collisions
+      const w = ARENA.wall;
+      if (this.x < w + this.radius) { this.x = w + this.radius; this.vx = -this.vx*0.4; this.damageFromSpeed(); }
+      if (this.x > ARENA.w - w - this.radius) { this.x = ARENA.w - w - this.radius; this.vx = -this.vx*0.4; this.damageFromSpeed(); }
+      if (this.y < w + this.radius) { this.y = w + this.radius; this.vy = -this.vy*0.4; this.damageFromSpeed(); }
+      if (this.y > ARENA.h - w - this.radius) { this.y = ARENA.h - w - this.radius; this.vy = -this.vy*0.4; this.damageFromSpeed(); }
+    }
+    damageFromSpeed(factor=0.65) {
+      const d = Math.hypot(this.vx, this.vy) * factor;
+      if (d > 6) {
+        this.hp = Math.max(0, this.hp - (d - 5));
+        audio.hit();
+        if (this.hp <= 0) this.alive = false;
+      }
+    }
+    serialize() {
+      return { id:this.id, name:this.name, color:this.color, x:this.x, y:this.y, a:this.a, vx:this.vx, vy:this.vy, va:this.va, hp:this.hp, alive:this.alive, score:this.score, boost:this.boost };
+    }
+    apply(s) { Object.assign(this, s); }
+  }
+
+  // ---------- Powerups ----------
+  function makePowerup(type, x, y) {
+    return { id: uid(), type, x, y, r: 16, t: 0 };
+  }
+  function randomPowerup() {
+    const types = ["repair","boost","ram"];
+    return types[Math.floor(Math.random()*types.length)];
+  }
+
+  // ---------- World ----------
+  const world = {
+    id: uid(),
+    round: 1,
+    cars: [],
+    powerups: [],
+    running: false,
+    host: true,
+    myId: null,
+    winner: null,
+    seed: Math.random()*1e9|0
+  };
+
+  function resetWorld(players) {
+    world.cars.length = 0;
+    world.powerups.length = 0;
+    world.winner = null;
+    const pts = spawnPoints(players.length);
+    players.forEach((p, i) => {
+      const c = new Car({ name: p.name, color: p.color, x: pts[i].x, y: pts[i].y });
+      c.id = p.id;
+      c.boost = 1.5;
+      world.cars.push(c);
+    });
+    // spawn some powerups
+    for (let i=0;i<8;i++) {
+      const x = rand(ARENA.wall+80, ARENA.w-ARENA.wall-80);
+      const y = rand(ARENA.wall+80, ARENA.h-ARENA.wall-80);
+      world.powerups.push(makePowerup(randomPowerup(), x, y));
+    }
+    world.running = true;
+  }
+
+  // ---------- Local players and inputs ----------
+  const localPlayers = [];
+  function addLocalPlayer(name, color, controlScheme=0) {
+    const id = uid();
+    localPlayers.push({ id, name, color, controlScheme, input: blankInput() });
+    return id;
+  }
+  function blankInput() {
+    return { steer:0, throttle:0, brake:0, boost:false, handbrake:false, vec:null, seq:0 };
+  }
+  function readInputs() {
+    for (const lp of localPlayers) {
+      const i = lp.input;
+      const scheme = lp.controlScheme;
+      if (scheme === 0) {
+        i.steer = (keys.has("a")||keys.has("A")? -1 : 0) + (keys.has("d")||keys.has("D")? 1 : 0);
+        i.throttle = (keys.has("w")||keys.has("W")) ? 1 : 0;
+        i.brake = (keys.has("s")||keys.has("S")) ? 1 : 0;
+        i.boost = keys.has("Shift");
+        i.handbrake = keys.has(" ");
+        if (joyActive) i.vec = { x: joyVec.x, y: joyVec.y }; else i.vec = null;
+      } else if (scheme === 1) {
+        i.steer = (keys.has("ArrowLeft")? -1 : 0) + (keys.has("ArrowRight")? 1 : 0);
+        i.throttle = keys.has("ArrowUp") ? 1 : 0;
+        i.brake = keys.has("ArrowDown") ? 1 : 0;
+        i.boost = keys.has("/");
+        i.handbrake = keys.has(".");
+        i.vec = null;
+      }
+      // Merge gamepad for player 1
+      if (scheme === 0) {
+        pollGamepad();
+        if (Math.abs(gamepadState.steer) > 0.15 || gamepadState.throttle > 0.05 || gamepadState.brake > 0.05 || gamepadState.boost || gamepadState.handbrake) {
+          i.steer = gamepadState.steer;
+          i.throttle = gamepadState.throttle;
+          i.brake = gamepadState.brake;
+          i.boost = gamepadState.boost;
+          i.handbrake = gamepadState.handbrake;
+          i.vec = null;
+        }
+      }
+      i.seq++;
+    }
+  }
+
+  function inputsFor(id) {
+    const lp = localPlayers.find(p => p.id === id);
+    return lp ? lp.input : blankInput();
+  }
+
+  // ---------- Networking (WebRTC P2P manual signaling) ----------
+  const net = {
+    role: "none", // host or client or none
+    pc: null,
+    dc: null,
+    connected: false,
+    peers: [], // reserved for future multi
+    pendingInputs: new Map(), // client inputs by id
+    lastStateSent: 0,
+  };
+
+  async function createPeer(role) {
+    closePeer();
+    net.role = role;
+    const pc = new RTCPeerConnection({ iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }] });
+    net.pc = pc;
+    net.connected = false;
+
+    pc.oniceconnectionstatechange = () => {
+      const st = pc.iceConnectionState;
+      if (st === "disconnected" || st === "failed" || st === "closed") {
+        showToast("P2P disconnected");
+        document.getElementById("netBadge").style.display = "none";
+        net.connected = false;
+      }
+    };
+
+    if (role === "host") {
+      const dc = pc.createDataChannel("game", { ordered: true });
+      attachDataChannel(dc);
+      pc.onicecandidate = e => {
+        if (!e.candidate) {
+          const offer = pc.localDescription;
+          document.getElementById("txtOffer").value = b64(json(offer));
+        }
+      };
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      document.getElementById("hostStatus").textContent = "Status: offer created, waiting for answer";
+    } else {
+      pc.ondatachannel = ev => {
+        attachDataChannel(ev.channel);
+      };
+      pc.onicecandidate = e => {
+        if (!e.candidate) {
+          const ans = pc.localDescription;
+          document.getElementById("txtAnswerOut").value = b64(json(ans));
+        }
+      };
+    }
+  }
+  function attachDataChannel(dc) {
+    net.dc = dc;
+    dc.onopen = () => {
+      net.connected = true;
+      document.getElementById("netBadge").style.display = "inline-block";
+      showToast("P2P connected");
+      // Client announces itself
+      if (net.role === "client") {
+        const me = localPlayers[0]; // first local player online
+        dc.send(json({ type:"hello", player:{ id: me.id, name: me.name, color: me.color } }));
+      }
+    };
+    dc.onclose = () => { net.connected = false; showToast("P2P closed"); };
+    dc.onmessage = ev => handleNetMessage(ev.data);
+  }
+  function closePeer() {
+    if (net.dc) try { net.dc.close(); } catch {}
+    if (net.pc) try { net.pc.close(); } catch {}
+    net.dc = null; net.pc = null; net.connected = false; net.role = "none";
+  }
+  function json(o){ return JSON.stringify(o); }
+  function b64(s){ return btoa(unescape(encodeURIComponent(s))); }
+  function unb64(s){ return decodeURIComponent(escape(atob(s))); }
+
+  async function applyRemoteAnswerFromText() {
+    const txt = document.getElementById("txtAnswerIn").value.trim();
+    if (!txt) return;
+    const ans = JSON.parse(unb64(txt));
+    await net.pc.setRemoteDescription(new RTCSessionDescription(ans));
+    document.getElementById("hostStatus").textContent = "Status: answer applied, connecting";
+  }
+  async function setRemoteOfferAndCreateAnswer() {
+    const txt = document.getElementById("txtOfferIn").value.trim();
+    if (!txt) return;
+    const offer = JSON.parse(unb64(txt));
+    await net.pc.setRemoteDescription(new RTCSessionDescription(offer));
+    const ans = await net.pc.createAnswer();
+    await net.pc.setLocalDescription(ans);
+    document.getElementById("joinStatus").textContent = "Status: answer created, send back to host";
+  }
+
+  function handleNetMessage(data) {
+    let msg;
+    try { msg = JSON.parse(data); } catch { return; }
+    if (msg.type === "hello" && net.role === "host") {
+      // Add remote player to world if not exists
+      const rp = msg.player;
+      if (!world.cars.find(c => c.id === rp.id)) {
+        const hostLocal = localPlayers.map(p => ({ id:p.id, name:p.name, color:p.color }));
+        const remote = [{ id: rp.id, name: rp.name, color: rp.color }];
+        resetWorld([...hostLocal, ...remote]);
+      }
+      // Send initial state
+      net.dc?.send(json({ type:"state", world: packWorld() }));
+    } else if (msg.type === "input" && net.role === "host") {
+      net.pendingInputs.set(msg.id, msg.input);
+    } else if (msg.type === "state" && net.role === "client") {
+      unpackWorld(msg.world);
+    } else if (msg.type === "event") {
+      // reserved
+    }
+  }
+
+  function sendInputsToHost() {
+    if (!net.connected || net.role !== "client") return;
+    const me = localPlayers[0];
+    net.dc?.send(json({ type:"input", id: me.id, input: me.input }));
+  }
+  function hostBroadcastState() {
+    if (!net.connected || net.role !== "host") return;
+    const t = now();
+    if (t - net.lastStateSent > 50) { // 20 Hz
+      const packed = packWorld();
+      net.dc?.send(json({ type:"state", world: packed }));
+      net.lastStateSent = t;
+    }
+  }
+  function packWorld() {
+    return {
+      id: world.id, round: world.round,
+      cars: world.cars.map(c => c.serialize()),
+      powerups: world.powerups
+    };
+  }
+  function unpackWorld(w) {
+    world.id = w.id; world.round = w.round;
+    // sync cars by id
+    for (const s of w.cars) {
+      let c = world.cars.find(k => k.id === s.id);
+      if (!c) { c = new Car({ name:s.name, color:s.color }); c.id = s.id; world.cars.push(c); }
+      c.apply(s);
+    }
+    // remove extras
+    world.cars = world.cars.filter(c => w.cars.some(s => s.id === c.id));
+    world.powerups = w.powerups || [];
+    world.running = true;
+  }
+
+  // ---------- UI ----------
+  const $ = sel => document.querySelector(sel);
+  $("#btnLocal").onclick = () => {
+    closePeer();
+    localPlayers.length = 0;
+    const p1 = addLocalPlayer("Player 1", COLORS[0], 0);
+    const p2 = addLocalPlayer("Player 2", COLORS[2], 1);
+    world.myId = p1;
+    world.host = true;
+    resetWorld(localPlayers.map(p => ({ id:p.id, name:p.name, color:p.color })));
+    showToast("Local match started");
+  };
+  $("#btnHost").onclick = () => {
+    $("#panelHost").style.display = "block";
+    $("#panelJoin").style.display = "none";
+    createPeer("host");
+    world.host = true;
+    if (!localPlayers.length) {
+      const p1 = addLocalPlayer("Host", COLORS[0], 0);
+      world.myId = p1;
+    }
+    resetWorld(localPlayers.map(p => ({ id:p.id, name:p.name, color:p.color })));
+    initAudio();
+  };
+  $("#btnJoin").onclick = () => {
+    $("#panelJoin").style.display = "block";
+    $("#panelHost").style.display = "none";
+    createPeer("client");
+    localPlayers.length = 0;
+    const me = addLocalPlayer("Guest", COLORS[1], 0);
+    world.myId = me;
+    world.host = false;
+    world.running = false; // wait for host
+    initAudio();
+  };
+  $("#btnControls").onclick = () => {
+    const h = $("#help"); h.style.display = h.style.display === "none" || !h.style.display ? "block" : "none";
+  };
+  $("#btnMute").onclick = () => toggleMute();
+
+  // Host panel
+  $("#btnCreateOffer").onclick = () => initAudio(); // already created by createPeer
+  $("#btnCopyOffer").onclick = async () => {
+    const ta = $("#txtOffer"); if (!ta.value) return;
+    await navigator.clipboard.writeText(ta.value); showToast("Offer copied");
+  };
+  $("#btnApplyAnswer").onclick = () => applyRemoteAnswerFromText();
+  $("#btnCloseHost").onclick = () => $("#panelHost").style.display = "none";
+
+  // Join panel
+  $("#btnCreateAnswer").onclick = () => setRemoteOfferAndCreateAnswer();
+  $("#btnCopyAnswer").onclick = async () => {
+    const ta = $("#txtAnswerOut"); if (!ta.value) return;
+    await navigator.clipboard.writeText(ta.value); showToast("Answer copied");
+  };
+  $("#btnCloseJoin").onclick = () => $("#panelJoin").style.display = "none";
+
+  // ---------- Rendering ----------
+  const cam = { x: ARENA.w/2, y: ARENA.h/2, z: 1 };
+  function setCamToMe() {
+    const me = world.cars.find(c => c.id === world.myId) || world.cars[0];
+    if (!me) return;
+    cam.x = lerp(cam.x, me.x, 0.08);
+    cam.y = lerp(cam.y, me.y, 0.08);
+  }
+  function worldToScreen(x, y) {
+    const w = canvas.width, h = canvas.height;
+    const sx = (x - cam.x) * cam.z + w/2;
+    const sy = (y - cam.y) * cam.z + h/2;
+    return [sx, sy];
+  }
+  function drawArena() {
+    const w = ARENA.w, h = ARENA.h, wall = ARENA.wall;
+    ctx.save();
+    // Grid
+    const step = 120;
+    ctx.lineWidth = 1 * DPR; ctx.strokeStyle = "rgba(150,190,255,0.08)";
+    for (let x=wall; x<=w-wall; x+=step) {
+      const a = worldToScreen(x, wall);
+      const b = worldToScreen(x, h-wall);
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    }
+    for (let y=wall; y<=h-wall; y+=step) {
+      const a = worldToScreen(wall, y);
+      const b = worldToScreen(w-wall, y);
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    }
+    // Outer walls
+    ctx.lineWidth = 8 * DPR; ctx.strokeStyle = "rgba(60,120,200,0.8)";
+    ctx.beginPath();
+    let p1 = worldToScreen(wall, wall);
+    let p2 = worldToScreen(w-wall, wall);
+    let p3 = worldToScreen(w-wall, h-wall);
+    let p4 = worldToScreen(wall, h-wall);
+    ctx.moveTo(p1[0], p1[1]); ctx.lineTo(p2[0], p2[1]); ctx.lineTo(p3[0], p3[1]); ctx.lineTo(p4[0], p4[1]); ctx.closePath(); ctx.stroke();
+
+    ctx.restore();
+  }
+  function drawCar(c) {
+    const [sx, sy] = worldToScreen(c.x, c.y);
+    ctx.save();
+    ctx.translate(sx, sy);
+    ctx.rotate(c.a);
+    const zz = cam.z;
+    // shadow
+    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    ctx.fillRect((-c.length/2+3)*zz, (-c.width/2+5)*zz, (c.length-6)*zz, (c.width-6)*zz);
+    // body
+    ctx.fillStyle = c.color;
+    roundRect(ctx, (-c.length/2)*zz, (-c.width/2)*zz, c.length*zz, c.width*zz, 8*zz);
+    ctx.fill();
+    // stripe
+    ctx.fillStyle = "rgba(255,255,255,0.7)";
+    ctx.fillRect((-c.length/2+6)*zz, (-2)*zz, (c.length-12)*zz, 4*zz);
+    // health bar
+    const hpw = (c.length-12)*zz;
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    ctx.fillRect((-c.length/2+6)*zz, (-c.width/2-8)*zz, hpw, 4*zz);
+    ctx.fillStyle = "rgba(120,220,120,0.9)";
+    ctx.fillRect((-c.length/2+6)*zz, (-c.width/2-8)*zz, hpw * (c.hp/100), 4*zz);
+    ctx.restore();
+  }
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x+r, y);
+    ctx.arcTo(x+w, y, x+w, y+h, r);
+    ctx.arcTo(x+w, y+h, x, y+h, r);
+    ctx.arcTo(x, y+h, x, y, r);
+    ctx.arcTo(x, y, x+w, y, r);
+    ctx.closePath();
+  }
+  function drawPowerup(p) {
+    const [sx, sy] = worldToScreen(p.x, p.y);
+    const r = p.r * cam.z;
+    ctx.save();
+    ctx.translate(sx, sy);
+    ctx.rotate(p.t*0.8);
+    ctx.lineWidth = 2 * DPR;
+    ctx.strokeStyle = "rgba(160,200,255,0.85)";
+    ctx.fillStyle = "rgba(120,180,255,0.15)";
+    ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "rgba(210,230,255,0.9)";
+    ctx.font = `${12*DPR}px ui-monospace, monospace`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    const label = p.type === "repair" ? "+" : p.type === "boost" ? "N2O" : "RAM";
+    ctx.fillText(label, 0, 0);
+    ctx.restore();
+  }
+
+  // Minimap
+  const mini = document.getElementById("minimap");
+  const mctx = mini.getContext("2d");
+  function drawMinimap() {
+    const w = mini.width, h = mini.height;
+    mctx.clearRect(0,0,w,h);
+    mctx.fillStyle = "#0b1015"; mctx.fillRect(0,0,w,h);
+    mctx.strokeStyle = "#2a3744"; mctx.strokeRect(2,2,w-4,h-4);
+    for (const c of world.cars) {
+      const x = (c.x / ARENA.w) * w;
+      const y = (c.y / ARENA.h) * h;
+      mctx.fillStyle = c.id === world.myId ? "#fff" : "#89b4ff";
+      mctx.fillRect(x-2, y-2, 4, 4);
+    }
+  }
+
+  // ---------- Simulation ----------
+  function resolveCarCar(a, b) {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const dist = Math.hypot(dx, dy), minDist = a.radius + b.radius;
+    if (dist === 0 || dist >= minDist) return;
+    const nx = dx / dist, ny = dy / dist;
+    const overlap = (minDist - dist);
+    // Separate
+    a.x -= nx * overlap * 0.5; a.y -= ny * overlap * 0.5;
+    b.x += nx * overlap * 0.5; b.y += ny * overlap * 0.5;
+    // Relative velocity along normal
+    const rvx = b.vx - a.vx, rvy = b.vy - a.vy;
+    const velAlongNormal = rvx*nx + rvy*ny;
+    if (velAlongNormal > 0) return;
+    const e = 0.35; // restitution
+    const j = -(1+e)*velAlongNormal / (1/1 + 1/1);
+    const impulsex = j * nx, impulsey = j * ny;
+    a.vx -= impulsex * 1; a.vy -= impulsey * 1;
+    b.vx += impulsex * 1; b.vy += impulsey * 1;
+    // Damage based on impulse
+    const dmg = Math.abs(j) * 0.9;
+    if (dmg > 3) {
+      a.hp = Math.max(0, a.hp - dmg*0.5);
+      b.hp = Math.max(0, b.hp - dmg*0.5);
+      if (a.hp <= 0) a.alive = false;
+      if (b.hp <= 0) b.alive = false;
+      audio.hit();
+    }
+  }
+
+  function stepWorld(dt) {
+    if (!world.running) return;
+
+    // Host authoritative step
+    if (world.host) {
+      // Apply inputs
+      for (const c of world.cars) {
+        let inp = inputsFor(c.id);
+        // Host includes remote client inputs if any
+        const pending = net.pendingInputs.get(c.id);
+        if (pending) inp = pending;
+        c.step(dt, inp);
+        if (c.id === world.myId) audio.engine(clamp(c.speed / c.maxSpeed, 0, 1));
+      }
+      // Car vs car
+      for (let i=0;i<world.cars.length;i++){
+        for (let j=i+1;j<world.cars.length;j++){
+          resolveCarCar(world.cars[i], world.cars[j]);
+        }
+      }
+      // Powerups
+      for (const p of world.powerups) p.t += dt;
+      for (const c of world.cars) {
+        if (!c.alive) continue;
+        for (let k=world.powerups.length-1; k>=0; k--) {
+          const p = world.powerups[k];
+          if (Math.hypot(c.x - p.x, c.y - p.y) < c.radius + p.r) {
+            if (p.type === "repair") c.hp = clamp(c.hp + 35, 0, 100);
+            if (p.type === "boost") c.boost = clamp(c.boost + 1.2, 0, c.boostMax);
+            if (p.type === "ram") { c.maxSpeed += 6; setTimeout(() => c.maxSpeed -= 6, 5000); }
+            world.powerups.splice(k,1);
+            audio.hit(2);
+          }
+        }
+      }
+      // Check winner
+      const alive = world.cars.filter(c => c.alive);
+      if (alive.length <= 1) {
+        world.running = false;
+        world.winner = alive[0]?.name || "No one";
+        setTimeout(() => showToast(`Winner: ${world.winner}`), 50);
+      }
+      // Spawn new powerups occasionally
+      if (Math.random() < dt*0.25 && world.powerups.length < 10) {
+        world.powerups.push(makePowerup(randomPowerup(), rand(ARENA.wall+80, ARENA.w-ARENA.wall-80), rand(ARENA.wall+80, ARENA.h-ARENA.wall-80)));
+      }
+      hostBroadcastState();
+    } else {
+      // Client side just runs light prediction for my car
+      const me = world.cars.find(c => c.id === world.myId);
+      if (me) me.step(dt, inputsFor(world.myId));
+    }
+  }
+
+  // ---------- Game loop ----------
+  let lt = now();
+  function frame() {
+    const t = now(), dt = Math.min((t - lt)/1000, 0.05); lt = t;
+
+    readInputs();
+    sendInputsToHost();
+    stepWorld(dt);
+    setCamToMe();
+
+    // Draw
+    ctx.clearRect(0,0,canvas.width, canvas.height);
+    ctx.save();
+    ctx.translate(canvas.width/2, canvas.height/2);
+    ctx.scale(DPR, DPR);
+    ctx.translate(-canvas.width/2, -canvas.height/2);
+    ctx.restore();
+
+    drawArena();
+    for (const p of world.powerups) drawPowerup(p);
+    for (const c of world.cars) drawCar(c);
+
+    // HUD
+    const me = world.cars.find(c => c.id === world.myId) || world.cars[0];
+    if (me) {
+      $("#hpFill").style.width = `${me.hp}%`;
+      $("#speedText").textContent = `${kmh(me.speed)} kmh`;
+    }
+    $("#roundText").textContent = world.winner ? `Winner: ${world.winner}` : `Round ${world.round}`;
+
+    drawMinimap();
+
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // ---------- Global keys ----------
+  addEventListener("keydown", e => {
+    if (e.key === "p" || e.key === "P") {
+      world.running = !world.running; showToast(world.running ? "Resumed" : "Paused");
+    } else if (e.key === "r" || e.key === "R") {
+      if (world.host) {
+        resetWorld(world.cars.map(c => ({ id:c.id, name:c.name, color:c.color })));
+        world.round++;
+        showToast("Restarted");
+      }
+    } else if (e.key === "v" || e.key === "V") {
+      const m = document.getElementById("minimap");
+      m.style.display = m.style.display === "none" ? "block" : "none";
+    }
+  });
+
+  // ---------- Start with a simple local match ----------
+  (function initLocal(){
+    const p1 = addLocalPlayer("Player 1", COLORS[0], 0);
+    const p2 = addLocalPlayer("Player 2", COLORS[2], 1);
+    world.myId = p1;
+    resetWorld(localPlayers.map(p => ({ id:p.id, name:p.name, color:p.color })));
+    initAudio();
+  })();
+
+})();
+</script>
+</body>
+</html>
