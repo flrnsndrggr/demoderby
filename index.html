@@ -2,503 +2,354 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Fish Duel — P2P FPS</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <title>Fish Duel P2P</title>
   <style>
     :root { color-scheme: dark; }
-    html, body { margin:0; height:100%; overflow:hidden; background:#0b0f14; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
-    #ui { position:fixed; inset:0; display:grid; place-items:center; pointer-events:none; }
-    .panel { pointer-events:auto; width:min(820px, 92vw); background:#0f172a; color:#e5e7eb; border:1px solid #1f2937; border-radius:16px; padding:20px; box-shadow:0 10px 40px rgba(0,0,0,.5); }
-    h1 { margin:0 0 8px; font-size:24px; }
-    p { margin:6px 0; color:#cbd5e1; }
-    .row { display:flex; gap:8px; flex-wrap:wrap; }
-    input[type="text"], textarea { flex:1 1 340px; min-height:44px; padding:10px 12px; border-radius:12px; border:1px solid #334155; background:#0b1220; color:#e5e7eb; resize:vertical; }
-    button { height:44px; padding:0 14px; border-radius:12px; border:1px solid #334155; background:#111827; color:#e5e7eb; cursor:pointer; font-weight:600; }
-    button.primary { background:#2563eb; border-color:#1d4ed8; }
-    button:disabled { opacity:.6; cursor:not-allowed; }
-    .muted { color:#94a3b8; font-size:12px; }
-    #hud { position:fixed; inset:0; pointer-events:none; }
-    #hud .top { position:absolute; top:12px; left:12px; display:flex; gap:8px; align-items:center; }
-    #hud .right { position:absolute; top:12px; right:12px; text-align:right; color:#cbd5e1; }
-    .heart { width:18px; height:18px; border:2px solid #94a3b8; border-radius:4px; box-shadow: inset 0 0 0 999px #111827; }
-    .heart.alive { box-shadow: inset 0 0 0 999px #22c55e; border-color:#16a34a; }
-    #center { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); color:#cbd5e1; text-align:center; }
-    #crosshair { width:8px; height:8px; border:2px solid #e5e7eb; border-radius:50%; opacity:.9; margin:0 auto 8px; }
-    #notice { font-size:13px; color:#94a3b8; }
-    #startOverlay { position:fixed; inset:0; display:none; place-items:center; background:rgba(0,0,0,.6); color:#e5e7eb; }
-    #startOverlay .bubble { background:#0f172a; border:1px solid #1f2937; padding:18px 22px; border-radius:14px; }
-    canvas { display:block; width:100vw; height:100vh; }
-    #baguette { position:fixed; right:18px; bottom:8vh; width:520px; height:220px; transform-origin:90% 90%; transform:rotateZ(12deg); opacity:.98; pointer-events:none; filter: drop-shadow(0 12px 24px rgba(0,0,0,.45)); display:none; }
-    #baguette svg { width:100%; height:100%; }
-    #toast { position:fixed; bottom:14px; left:50%; transform:translateX(-50%); background:#111827; border:1px solid #223; padding:8px 12px; border-radius:10px; color:#cbd5e1; display:none; }
+    html, body { height:100%; width:100%; margin:0; padding:0; background:#0b0f14; overflow:hidden; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+    #ui { position:fixed; inset:0; pointer-events:none; }
+    #hud { position:absolute; top:12px; left:12px; display:flex; gap:6px; align-items:center; pointer-events:none; }
+    .heart { width:24px; height:24px; filter: drop-shadow(0 0 6px rgba(255,0,70,.4)); }
+    #status { position:absolute; top:12px; right:12px; pointer-events:auto; }
+    .pill { display:inline-flex; align-items:center; gap:8px; padding:8px 12px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.15); border-radius:999px; backdrop-filter: blur(6px); font-size:12px; }
+    .btn { cursor:pointer; padding:6px 10px; border-radius:8px; border:1px solid rgba(255,255,255,.2); background:rgba(255,255,255,.1); pointer-events:auto; }
+    .btn:hover { background:rgba(255,255,255,.18); }
+    #shareLink { max-width:46vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    #center { position:absolute; inset:0; display:grid; place-items:center; pointer-events:none; }
+    #crosshair { width:16px; height:16px; border:2px solid rgba(255,255,255,.8); border-radius:50%; box-shadow:0 0 0 2px rgba(255,255,255,.2) inset; }
+    #overlay { position:fixed; inset:0; display:grid; place-items:center; background:radial-gradient(1200px 600px at 50% 0%, rgba(22,28,36,.85), rgba(11,15,20,.95)); color:#e7edf3; }
+    #card { width:min(680px, 92vw); padding:24px; border-radius:16px; background:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.04)); border:1px solid rgba(255,255,255,.16); box-shadow:0 10px 40px rgba(0,0,0,.35); }
+    h1 { margin:0 0 8px 0; font-size:28px; letter-spacing:.5px; }
+    p { margin:6px 0; opacity:.9; }
+    code { padding:2px 6px; background:rgba(255,255,255,.08); border-radius:6px; }
+    #startBtn { margin-top:14px; padding:12px 16px; border-radius:12px; border:1px solid rgba(255,255,255,.25); background:#23b2ff1a; color:#e7edf3; cursor:pointer; }
+    #footerHint { margin-top:10px; font-size:12px; opacity:.8; }
+    #toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:rgba(10,14,18,.8); color:#e7edf3; border:1px solid rgba(255,255,255,.18); border-radius:12px; padding:8px 12px; box-shadow:0 10px 30px rgba(0,0,0,.4); display:none; }
+    canvas { display:block; }
   </style>
 </head>
 <body>
+  <div id="overlay">
+    <div id="card">
+      <h1>Fish Duel P2P</h1>
+      <p>1v1 browser duel. Left click throws a fish. Right click swings a giant baguette. Three hits and you lose.</p>
+      <p>Move with <code>WASD</code>, look with mouse. <code>R</code> to respawn, <code>Esc</code> to unlock cursor, <code>N</code> to mute.</p>
+      <p>Share the link shown in the top right to invite exactly one opponent. No logins, no popups.</p>
+      <button id="startBtn">Start</button>
+      <div id="footerHint">Pointer Lock and Audio require a click to start.</div>
+    </div>
+  </div>
+
   <div id="ui">
-    <div class="panel" id="connectPanel">
-      <h1>Fish Duel — P2P 1v1</h1>
-      <p>Throw fish at your rival. Three hits and you lose. Melee with a baguette. 1v1. Works peer to peer in the browser via WebRTC. No server required, just a quick copy paste to finish the handshake.</p>
-      <p class="muted">Controls: Click to lock mouse. WASD to move, Space to jump, Shift to sprint, Left click to throw fish, Right click or F to baguette melee, N to toggle name tags, M to mute sfx.</p>
-      <hr style="border:none; border-top:1px solid #233; margin:12px 0;">
-      <div class="row">
-        <button class="primary" id="btnHost">Host match</button>
-        <button id="btnJoin">Join match</button>
-        <button id="btnRandom">Quick pair</button>
-      </div>
-      <p id="hostStep" class="muted" style="display:none">1) Copy the invite link and send it to your opponent. 2) When they give you back an Answer Code, paste it below and press Connect.</p>
-      <div class="row" id="hostRow" style="display:none; margin-top:8px;">
-        <input id="inviteLink" type="text" readonly />
-        <button id="copyInvite">Copy link</button>
-      </div>
-      <div class="row" id="hostRow2" style="display:none; margin-top:8px;">
-        <textarea id="answerBox" placeholder="Paste Answer Code here"></textarea>
-        <button id="btnConnectAnswer" class="primary">Connect</button>
-      </div>
-      <div id="joinStep" style="display:none; margin-top:8px;">
-        <p class="muted">Open your friend's link. If this page already contains their Offer Code, click Generate Answer then send the code back. It is auto copied.</p>
-        <div class="row">
-          <textarea id="offerBox" placeholder="Paste Offer Code here (unless it auto appeared)"></textarea>
-        </div>
-        <div class="row" style="margin-top:8px;">
-          <button id="btnMakeAnswer" class="primary">Generate Answer</button>
-          <button id="btnCopyAnswer">Copy Answer</button>
-        </div>
-      </div>
-      <p class="muted" id="status"></p>
+    <div id="hud"></div>
+    <div id="status" class="pill">
+      <span id="connState">Idle</span>
+      <span id="shareLink"></span>
+      <button id="copyBtn" class="btn" title="Copy link">Copy</button>
+      <button id="muteBtn" class="btn" title="Toggle audio">Mute</button>
     </div>
+    <div id="center"><div id="crosshair"></div></div>
   </div>
 
-  <div id="hud" style="display:none">
-    <div class="top">
-      <div class="heart" id="h1"></div>
-      <div class="heart" id="h2"></div>
-      <div class="heart" id="h3"></div>
-    </div>
-    <div class="right">
-      <div id="names"></div>
-      <div id="ping" class="muted"></div>
-    </div>
-    <div id="center">
-      <div id="crosshair"></div>
-      <div id="notice">Left click to throw fish · Right click / F to baguette · ESC to unlock cursor</div>
-    </div>
-  </div>
-
-  <div id="startOverlay"><div class="bubble"><strong>Click to start</strong><div class="muted">Grant mouse lock to play</div><div style="margin-top:10px; display:flex; gap:8px; justify-content:flex-end;"><button id="btnCloseOverlay">Close</button></div></div></div>
-
-  <div id="baguette" aria-hidden="true">
-    <!-- Simple baguette vector -->
-    <svg viewBox="0 0 300 120" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="g" x1="0" x2="1">
-          <stop offset="0" stop-color="#f4a261"/>
-          <stop offset="1" stop-color="#e76f51"/>
-        </linearGradient>
-      </defs>
-      <ellipse cx="150" cy="60" rx="140" ry="44" fill="url(#g)" stroke="#7c3f2b" stroke-width="4"/>
-      <path d="M40,60 q40,-40 80,0 q40,40 80,0 q40,-40 80,0" fill="none" stroke="#fef3c7" stroke-width="6" stroke-linecap="round"/>
-    </svg>
-  </div>
   <div id="toast"></div>
 
-  <canvas id="game"></canvas>
-
-  <!-- Three.js from CDN -->
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
-
   <script>
-  // ====== Small helpers ======
-  const $ = sel => document.querySelector(sel);
-  const $$ = sel => Array.from(document.querySelectorAll(sel));
-  const toast = (t) => { const el = $('#toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast._t); toast._t = setTimeout(()=>{ el.style.display='none'; }, 2200); };
-  const enc = (obj) => btoa(unescape(encodeURIComponent(JSON.stringify(obj))));
-  const dec = (b64) => JSON.parse(decodeURIComponent(escape(atob(b64))));
+  // Utils
+  const randId = (n=6)=> Array.from(crypto.getRandomValues(new Uint8Array(n))).map(x=> (x%36).toString(36)).join('');
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const lerp=(a,b,t)=>a+(b-a)*t;
 
-  // ====== WebRTC P2P (copy paste signaling) ======
-  const iceServers = [ { urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:global.stun.twilio.com:3478?transport=udp' } ];
-  let pc, dc, isHost = false, connected = false, lastPing = 0, pingRTT = 0;
+  // URL room
+  const ensureRoomUrl = ()=>{
+    const url = new URL(location.href);
+    if (!url.hash) { url.hash = 'r-' + randId(8); history.replaceState(null, '', url.toString()); }
+    return location.hash.slice(1);
+  };
 
-  const waitIce = (pc) => new Promise(res => {
-    if (pc.iceGatheringState === 'complete') return res();
-    const check = () => { if (pc.iceGatheringState === 'complete') { pc.removeEventListener('icegatheringstatechange', check); res(); } };
-    pc.addEventListener('icegatheringstatechange', check);
-  });
+  // Audio
+  const SFX = (()=>{
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    let muted = false;
+    const env = (f=440, d=.12, type='square', g=.06)=>{
+      if (muted) return { stop:()=>{} };
+      const t = ctx.currentTime, o = ctx.createOscillator(), gain = ctx.createGain();
+      o.type = type; o.frequency.value = f;
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(g, t+.01);
+      gain.gain.exponentialRampToValueAtTime(.0001, t+d);
+      o.connect(gain); gain.connect(ctx.destination); o.start(t); o.stop(t+d+.05);
+      return o;
+    };
+    return { ctx, get muted(){return muted}, toggle(){ return (muted=!muted); }, hit(){env(190,.08,'sawtooth',.08)}, throw(){env(720,.05,'triangle',.04)}, swing(){env(340,.04,'square',.05)}, lose(){env(110,.6,'sine',.12)}, win(){env(520,.5,'triangle',.12)} };
+  })();
 
-  async function createPeer() {
-    pc = new RTCPeerConnection({ iceServers });
-    pc.onconnectionstatechange = () => { $('#status').textContent = `Connection: ${pc.connectionState}`; if (pc.connectionState === 'connected') onConnected(); };
-    pc.oniceconnectionstatechange = () => { if (pc.iceConnectionState === 'failed') toast('ICE failed. Try again.'); };
-    pc.ondatachannel = (ev) => { dc = ev.channel; wireDC(); };
+  // DOM
+  const overlay = document.getElementById('overlay');
+  const startBtn = document.getElementById('startBtn');
+  const hud = document.getElementById('hud');
+  const shareLinkEl = document.getElementById('shareLink');
+  const connStateEl = document.getElementById('connState');
+  const copyBtn = document.getElementById('copyBtn');
+  const muteBtn = document.getElementById('muteBtn');
+  const toast = document.getElementById('toast');
+  const showToast = (msg)=>{ toast.textContent = msg; toast.style.display='block'; setTimeout(()=> toast.style.display='none', 1500); };
+
+  // Three core
+  let scene, camera, renderer, clock;
+  let local = { hp:3, alive:true, model:null, baguette:null };
+  let remote = { hp:3, alive:true, model:null };
+  const projectiles = [];
+  const world = { size: 80 };
+
+  // Shared geometries/materials for fish (no per-shot allocations)
+  let GEO, MAT;
+
+  function setupThree() {
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0b0f14);
+
+    camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 500);
+    camera.position.set(0, 1.7, 6);
+
+    renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    document.body.appendChild(renderer.domElement);
+
+    clock = new THREE.Clock();
+
+    const hemi = new THREE.HemisphereLight(0xa0d8ff, 0x203040, 0.6); scene.add(hemi);
+    const dir = new THREE.DirectionalLight(0xffffff, .7); dir.position.set(10,20,10); scene.add(dir);
+
+    const g = new THREE.PlaneGeometry(world.size, world.size, 32, 32);
+    const grid = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color:0x12202c, metalness:.2, roughness:.8 }));
+    grid.rotation.x = -Math.PI/2; scene.add(grid);
+    const gridHelper = new THREE.GridHelper(world.size, 32, 0x1e90ff, 0x1b3a52); gridHelper.position.y = 0.01; scene.add(gridHelper);
+
+    const wmat = new THREE.MeshStandardMaterial({ color:0x0f2a3a, metalness:.1, roughness:.9 });
+    const wallGeo = new THREE.BoxGeometry(world.size, 4, 0.5);
+    const wall1 = new THREE.Mesh(wallGeo, wmat); wall1.position.set(0,2,world.size/2); scene.add(wall1);
+    const wall2 = wall1.clone(); wall2.position.set(0,2,-world.size/2); scene.add(wall2);
+    const wall3 = new THREE.Mesh(new THREE.BoxGeometry(0.5,4,world.size), wmat); wall3.position.set(world.size/2,2,0); scene.add(wall3);
+    const wall4 = wall3.clone(); wall4.position.set(-world.size/2,2,0); scene.add(wall4);
+
+    local.baguette = makeBaguette();
+    local.baguette.position.set(0.4, -0.4, -0.8);
+    local.baguette.rotation.set(0.3, 0.2, 0.4);
+    camera.add(local.baguette);
+    scene.add(camera);
+
+    remote.model = makeAvatar(0x49a8ff); remote.model.visible = false; scene.add(remote.model);
+
+    scene.fog = new THREE.Fog(0x0b0f14, 40, 140);
+    window.addEventListener('resize', onResize);
+
+    // init shared fish assets once
+    GEO = {
+      body: new THREE.SphereGeometry(0.18, 16, 12),
+      tail: new THREE.ConeGeometry(0.12, 0.28, 12),
+      fin:  new THREE.ConeGeometry(0.08, 0.16, 10),
+      eye:  new THREE.SphereGeometry(0.03, 8, 6)
+    };
+    MAT = {
+      body: new THREE.MeshStandardMaterial({ color:0x3ea7ff, metalness:.3, roughness:.4 }),
+      tail: new THREE.MeshStandardMaterial({ color:0x2b6fb0, metalness:.2, roughness:.6 }),
+      fin:  new THREE.MeshStandardMaterial({ color:0x5fc0ff }),
+      eye:  new THREE.MeshStandardMaterial({ color:0x000000 })
+    };
   }
 
-  function wireDC() {
-    dc.binaryType = 'arraybuffer';
-    dc.onopen = () => { connected = true; $('#ui').style.display = 'none'; $('#hud').style.display = 'block'; $('#startOverlay').style.display='grid'; toast('Connected'); send({ t:'hello', name: myName }); };
-    dc.onclose = () => { connected = false; toast('Disconnected'); };
-    dc.onmessage = (ev) => handleNetMessage(ev.data);
+  function onResize(){ camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); }
+
+  // Models
+  function makeAvatar(color){
+    const group = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 1.1, 8, 16), new THREE.MeshStandardMaterial({ color, metalness:.1, roughness:.7 }));
+    body.position.y = 1.1; group.add(body);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.28, 16, 12), new THREE.MeshStandardMaterial({ color:0xffffff })); head.position.y = 2; group.add(head);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 8), new THREE.MeshStandardMaterial({ color:0x1e90ff })); eye.position.set(0.08, 2.05, 0.25); group.add(eye);
+    const eye2 = eye.clone(); eye2.position.x = -0.08; group.add(eye2);
+    return group;
   }
 
-  function send(obj) { if (dc && dc.readyState === 'open') dc.send(JSON.stringify(obj)); }
-
-  async function hostFlow() {
-    isHost = true; await createPeer();
-    dc = pc.createDataChannel('game'); wireDC();
-    const offer = await pc.createOffer(); await pc.setLocalDescription(offer); await waitIce(pc);
-    const offerCode = enc({ sdp: pc.localDescription });
-    const url = new URL(location.href); url.searchParams.set('offer', offerCode); $('#inviteLink').value = url.toString();
-    $('#hostStep').style.display = 'block'; $('#hostRow').style.display='flex'; $('#hostRow2').style.display='flex';
+  // Projectile pool (recycle meshes)
+  const fishPool = [];
+  function acquireFish(){
+    if (fishPool.length) { const m = fishPool.pop(); m.visible = true; return m; }
+    const fish = new THREE.Group();
+    const body = new THREE.Mesh(GEO.body, MAT.body); body.scale.set(1.6,1,1); fish.add(body);
+    const tail = new THREE.Mesh(GEO.tail, MAT.tail); tail.rotation.z = Math.PI; tail.position.x = -0.28; fish.add(tail);
+    const fin  = new THREE.Mesh(GEO.fin, MAT.fin); fin.rotation.z = Math.PI/2; fin.position.set(0.05, -0.08, 0); fish.add(fin);
+    const eye1 = new THREE.Mesh(GEO.eye, MAT.eye); eye1.position.set(0.18, 0.06, 0.11); fish.add(eye1);
+    const eye2 = eye1.clone(); eye2.position.z = -0.11; fish.add(eye2);
+    return fish;
   }
+  function releaseFish(f){ f.visible=false; scene.remove(f); fishPool.push(f); }
 
-  async function joinFlowFromOffer(offerCode) {
-    await createPeer();
-    const { sdp } = dec(offerCode);
-    await pc.setRemoteDescription(sdp);
-    const answer = await pc.createAnswer(); await pc.setLocalDescription(answer); await waitIce(pc);
-    const answerCode = enc({ sdp: pc.localDescription });
-    $('#offerBox').value = offerCode;
-    $('#joinStep').style.display='block';
-    $('#btnMakeAnswer').disabled = true; $('#btnCopyAnswer').disabled = false;
-    $('#btnCopyAnswer').dataset.answer = answerCode;
-    try { await navigator.clipboard.writeText(answerCode); toast('Answer copied to clipboard'); } catch {}
-  }
-
-  async function applyAnswer(answerCode) {
-    const { sdp } = dec(answerCode);
-    await pc.setRemoteDescription(sdp);
-  }
-
-  // Quick pair: generates a short room id in location.hash that both players can share out of band.
-  function quickPair() {
-    const room = Math.random().toString(36).slice(2,8);
-    const url = new URL(location.href); url.hash = `#${room}`; history.replaceState({}, '', url);
-    $('#status').textContent = `Room created: ${room}. Click Host, send link, paste back Answer.`;
-    toast('Room code set in URL');
-  }
-
-  // ====== Minimal FPS game ======
-  const canvas = $('#game');
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
-  const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0b0f14);
-  const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 1000);
-  const clock = new THREE.Clock();
-
-  // Lighting and simple arena
-  const hemi = new THREE.HemisphereLight(0xbde0ff, 0x0a0a15, 0.8); scene.add(hemi);
-  const dir = new THREE.DirectionalLight(0xffffff, 0.45); dir.position.set(5,10,2); scene.add(dir);
-  const floorGeo = new THREE.PlaneGeometry(200,200, 40,40);
-  floorGeo.rotateX(-Math.PI/2);
-  const floorMat = new THREE.MeshStandardMaterial({ color:0x112233, wireframe:false });
-  const floor = new THREE.Mesh(floorGeo, floorMat); scene.add(floor);
-  // Some pillars
-  const pillars = new THREE.Group();
-  for (let i=0;i<16;i++) {
-    const g = new THREE.CylinderGeometry(0.6,0.6,4,10);
-    const m = new THREE.MeshStandardMaterial({ color:0x1f2a44 });
-    const c = new THREE.Mesh(g,m);
-    c.position.set((Math.random()*2-1)*20, 2, (Math.random()*2-1)*20);
-    pillars.add(c);
-  }
-  scene.add(pillars);
-
-  // Player state
-  const input = { fwd:0, str:0, up:false, sprint:false, mouseLocked:false, melee:false, throw:false };
-  let yaw = 0, pitch = 0; const vel = new THREE.Vector3(); const pos = new THREE.Vector3(0,1.6, 10);
-  let hp = 3, otherHP = 3; const nameTags = { show:true };
-  let myName = `Player-${Math.random().toString(36).slice(2,6)}`;
-
-  // Opponent proxy
-  const foe = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 1.0, 8, 16), new THREE.MeshStandardMaterial({ color:0x8b5cf6 }));
-  foe.position.set(0,1, -10); scene.add(foe);
-
-  // Fish projectiles
-  const fishes = []; // {mesh, vel, owner:'me'|'them'}
-  function makeFish(owner='me') {
+  function makeBaguette(){
     const g = new THREE.Group();
-    // Body
-    const bodyMat = new THREE.MeshStandardMaterial({ color: owner==='me'?0x22c55e:0xf59e0b, metalness:0.1, roughness:0.6 });
-    const body = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 12), bodyMat);
-    body.scale.set(1.6, 0.9, 0.9);
-    // Tail
-    const tail = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.32, 16), new THREE.MeshStandardMaterial({ color:0x9ca3af }));
-    tail.rotation.z = Math.PI; tail.position.z = -0.46;
-    // Fins
-    const finMat = new THREE.MeshStandardMaterial({ color:0x9ca3af, roughness:0.5 });
-    const dorsal = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.16, 10), finMat); dorsal.rotation.x = Math.PI; dorsal.position.set(0,0.18,-0.06);
-    const pFinL = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.14, 10), finMat); pFinL.rotation.y = Math.PI/2; pFinL.position.set(0.18,-0.02,0);
-    const pFinR = pFinL.clone(); pFinR.position.x = -0.18; pFinR.rotation.y *= -1;
-    // Eyes
-    const eyeGeo = new THREE.SphereGeometry(0.04, 8, 8);
-    const eyeL = new THREE.Mesh(eyeGeo, new THREE.MeshStandardMaterial({ color:0x111111 }));
-    const eyeR = eyeL.clone();
-    eyeL.position.set(0.22, 0.03, 0.08);
-    eyeR.position.set(0.22, 0.03, -0.08);
-    g.add(body, tail, dorsal, pFinL, pFinR, eyeL, eyeR);
-    g.userData.tail = tail;
-    g.userData.fins = [pFinL, pFinR];
-    scene.add(g); return g;
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.13, 1.0, 8, 16), new THREE.MeshStandardMaterial({ color:0xc78d4a, metalness:.1, roughness:.8 }));
+    body.rotation.z = Math.PI/2; g.add(body);
+    const cutsMat = new THREE.MeshStandardMaterial({ color:0xe4b680, metalness:.1, roughness:.9 });
+    for (let i=0;i<5;i++){ const cut = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.02, 6, 16, Math.PI/2), cutsMat); cut.rotation.x = Math.PI/2; cut.position.x = -0.5 + i*0.25; g.add(cut); }
+    return g;
   }
-
-  function throwFish(isLocal=true) {
-    const m = makeFish(isLocal?'me':'them');
-    let startPos, dirVec;
-    if (isLocal) {
-      startPos = camera.position.clone();
-      dirVec = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
-    } else {
-      startPos = foe.position.clone().add(new THREE.Vector3(0,0.6,0));
-      dirVec = foe.getWorldDirection(new THREE.Vector3());
-    }
-    m.position.copy(startPos.add(dirVec.clone().multiplyScalar(0.8)));
-    const speed = isLocal ? 16 : 14;
-    fishes.push({ mesh:m, vel:dirVec.multiplyScalar(speed), owner: isLocal?'me':'them' });
-    if (isLocal) send({ t:'throw' });
-    sfx('throw');
-  }
-
-  // Melee baguette swing
-  const baguetteEl = $('#baguette'); let swingT = 0;
-  function swing() {
-    swingT = 1; baguetteEl.style.display='block'; sfx('melee');
-    // Hit check: close enough and roughly in front
-    const toFoe = foe.position.clone().sub(camera.position);
-    const dist = toFoe.length();
-    const fwd = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
-    const facing = fwd.dot(toFoe.normalize());
-    if (dist < 2.2 && facing > 0.5) registerHit('foe');
-    send({ t:'melee' });
-  }
-
-  function registerHit(target) {
-    if (target==='me') {
-      hp = Math.max(0, hp-1); updateHearts(); sfx('hit'); if (hp===0) { send({ t:'youwin' }); gameOver(false); }
-    } else {
-      otherHP = Math.max(0, otherHP-1); if (otherHP===0) gameOver(true); // client side win
-      send({ t:'hit' });
-    }
-  }
-
-  function updateHearts() {
-    for (let i=1;i<=3;i++) $('#h'+i).className = 'heart '+(i<=hp?'alive':'');
-  }
-
-  function gameOver(win) {
-    toast(win? 'You win' : 'You lose');
-    $('#notice').textContent = win ? 'Victory' : 'Defeat';
-    // Freeze controls a bit
-    setTimeout(()=>{ document.exitPointerLock?.(); }, 800);
-  }
-
-  // Resize
-  function onResize() {
-    const w = window.innerWidth, h = window.innerHeight;
-    renderer.setSize(w, h, false); camera.aspect = w/h; camera.updateProjectionMatrix();
-  }
-  window.addEventListener('resize', onResize);
-  onResize();
 
   // Input
   const keys = new Set();
-  window.addEventListener('keydown', e=>{
-    if (e.repeat) return;
-    const k = e.code;
-    if (['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','ShiftLeft','ShiftRight'].includes(k)) e.preventDefault();
-    if (k==='KeyW' || k==='ArrowUp') keys.add('w');
-    if (k==='KeyS' || k==='ArrowDown') keys.add('s');
-    if (k==='KeyA' || k==='ArrowLeft') keys.add('a');
-    if (k==='KeyD' || k==='ArrowRight') keys.add('d');
-    if (k==='Space') keys.add('space');
-    if (k==='ShiftLeft' || k==='ShiftRight') keys.add('shift');
-    if (k==='KeyF') swing();
-    if (k==='KeyN') { nameTags.show = !nameTags.show; updateNames(); }
-    if (k==='KeyM') { audioMuted = !audioMuted; toast(audioMuted?'Muted':'Sound on'); }
-  });
-    if (e.code==='KeyS' || e.code==='ArrowDown') keys.add('s');
-    if (e.code==='KeyA' || e.code==='ArrowLeft') keys.add('a');
-    if (e.code==='KeyD' || e.code==='ArrowRight') keys.add('d');
-    if (e.code==='Space') keys.add('space');
-    if (e.code==='ShiftLeft' || e.code==='ShiftRight') keys.add('shift');
-    if (e.code==='KeyF') swing();
-    if (e.code==='KeyN') { nameTags.show = !nameTags.show; }
-    if (e.code==='KeyM') { audioMuted = !audioMuted; toast(audioMuted?'Muted':'Sound on'); }
-  });
-  window.addEventListener('keyup', e=>{
-    const k = e.code;
-    if (['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','ShiftLeft','ShiftRight'].includes(k)) e.preventDefault();
-    if (k==='KeyW' || k==='ArrowUp') keys.delete('w');
-    if (k==='KeyS' || k==='ArrowDown') keys.delete('s');
-    if (k==='KeyA' || k==='ArrowLeft') keys.delete('a');
-    if (k==='KeyD' || k==='ArrowRight') keys.delete('d');
-    if (k==='Space') keys.delete('space');
-    if (k==='ShiftLeft' || k==='ShiftRight') keys.delete('shift');
-  });
-    if (e.code==='KeyS' || e.code==='ArrowDown') keys.delete('s');
-    if (e.code==='KeyA' || e.code==='ArrowLeft') keys.delete('a');
-    if (e.code==='KeyD' || e.code==='ArrowRight') keys.delete('d');
-    if (e.code==='Space') keys.delete('space');
-    if (e.code==='ShiftLeft' || e.code==='ShiftRight') keys.delete('shift');
-  });
+  let yaw = 0, pitch = 0;
+  let vel = new THREE.Vector3();
+  const pos = new THREE.Vector3(0,1.7, -world.size/4);
+  const up = new THREE.Vector3(0,1,0);
+  const TMP = { forward:new THREE.Vector3(), right:new THREE.Vector3(), acc:new THREE.Vector3(), dir:new THREE.Vector3(), origin:new THREE.Vector3() };
 
-  canvas.addEventListener('click', ()=>{
-    if (document.pointerLockElement !== canvas) {
-      canvas.requestPointerLock?.(); return;
-    }
-    throwFish(true);
-  });
-  canvas.addEventListener('contextmenu', e=>{ e.preventDefault(); swing(); });
-  document.addEventListener('pointerlockchange', ()=>{
-    const locked = document.pointerLockElement === canvas;
-    $('#startOverlay').style.display = locked? 'none':'grid';
-  });
-  // Close overlay button support
-  document.addEventListener('click', (e)=>{
-    if (e.target && e.target.id === 'btnCloseOverlay') {
-      $('#startOverlay').style.display = 'none';
-    }
-  });
-  document.addEventListener('mousemove', (e)=>{
-    if (document.pointerLockElement !== canvas) return;
-    const sensitivity = 0.0025;
-    yaw -= e.movementX * sensitivity;
-    pitch -= e.movementY * sensitivity; pitch = Math.max(-1.4, Math.min(1.4, pitch));
-  });
+  function lockPointer(){ renderer.domElement.requestPointerLock?.(); }
+  function onMouseMove(e){ if (document.pointerLockElement === renderer.domElement) { const s = 0.0025; yaw -= e.movementX*s; pitch -= e.movementY*s; pitch = clamp(pitch, -Math.PI/2+0.05, Math.PI/2-0.05); } }
+  function onKey(e,down){ if (down) keys.add(e.code); else keys.delete(e.code); if (e.code==='KeyN'&&down) toggleMute(); if (e.code==='KeyR'&&down) respawn(); }
 
-  // Simple kinematics
-  const tmp = new THREE.Vector3();
-  function step(dt) {
-    const speed = (keys.has('shift')? 7.2: 4.2);
-    tmp.set(0,0,0);
-    if (keys.has('w')) tmp.z -= 1;
-    if (keys.has('s')) tmp.z += 1;
-    if (keys.has('a')) tmp.x -= 1;
-    if (keys.has('d')) tmp.x += 1;
-    if (tmp.lengthSq()>0) tmp.normalize();
-    // rotate by yaw
-    const sin=Math.sin(yaw), cos=Math.cos(yaw);
-    const dx = tmp.x * cos - tmp.z * sin;
-    const dz = tmp.x * sin + tmp.z * cos;
-    pos.x += dx * speed * dt;
-    pos.z += dz * speed * dt;
-    // keep in arena
-    pos.x = Math.max(-45, Math.min(45, pos.x));
-    pos.z = Math.max(-45, Math.min(45, pos.z));
+  function dirFromAngles(){ return TMP.dir.set(Math.sin(yaw)*Math.cos(pitch), Math.sin(-pitch), Math.cos(yaw)*Math.cos(pitch)).normalize(); }
 
-    // camera from pos
-    camera.position.copy(pos);
-    camera.rotation.set(pitch, yaw, 0, 'YXZ');
+  function updateMovement(dt){
+    const speed = (keys.has('ShiftLeft')||keys.has('ShiftRight')) ? 7 : 4.2;
+    const forward = TMP.forward.set(Math.sin(yaw),0,Math.cos(yaw));
+    const right = TMP.right.copy(forward).cross(up).multiplyScalar(-1);
+    const acc = TMP.acc.set(0,0,0);
+    if (keys.has('KeyW')||keys.has('ArrowUp')) acc.add(forward);
+    if (keys.has('KeyS')||keys.has('ArrowDown')) acc.add(forward.clone().multiplyScalar(-1));
+    if (keys.has('KeyA')||keys.has('ArrowLeft')) acc.add(right.clone().multiplyScalar(-1));
+    if (keys.has('KeyD')||keys.has('ArrowRight')) acc.add(right);
+    if (acc.lengthSq()>0) acc.normalize().multiplyScalar(speed);
+    vel.lerp(acc, 1 - Math.exp(-10*dt));
+    pos.addScaledVector(vel, dt);
+    pos.x = clamp(pos.x, -world.size/2+1, world.size/2-1);
+    pos.z = clamp(pos.z, -world.size/2+1, world.size/2-1);
+    camera.position.copy(pos); camera.rotation.set(pitch, yaw, 0, 'ZYX');
+  }
 
-    // Animate baguette swing
-    if (swingT>0) { swingT = Math.max(0, swingT - dt*2.8); const a = Math.sin((1-swingT)*Math.PI)*38; $('#baguette').style.transform = `rotateZ(${12+a}deg)`; if (swingT===0) $('#baguette').style.display='none'; }
+  // Combat
+  let canThrow = true, canSwing = true;
+  function throwFish(owner='me'){
+    if (owner==='me' && !canThrow) return;
+    const fish = acquireFish();
+    const origin = TMP.origin.copy(camera.position);
+    const dir = dirFromAngles();
+    fish.position.copy(origin).addScaledVector(dir, 0.8);
+    const speed = 18; const v = dir.clone().multiplyScalar(speed);
+    scene.add(fish);
+    projectiles.push({ owner, mesh:fish, vel:v, ttl:2.5 });
+    if (owner==='me') { canThrow=false; setTimeout(()=>canThrow=true, 350); SFX.throw(); send({t:'throw', o:origin.toArray(), d:v.toArray()}); }
+  }
 
-    // Projectiles update
-    for (let i=fishes.length-1;i>=0;i--) {
-      const f = fishes[i];
-      f.mesh.position.addScaledVector(f.vel, dt);
-      // Face direction of travel
-      const lookTarget = f.mesh.position.clone().add(f.vel);
-      f.mesh.lookAt(lookTarget);
-      // Animate tail and fins
-      if (!f.phase) f.phase = Math.random()*Math.PI*2;
-      f.phase += dt*12;
-      if (f.mesh.userData.tail) f.mesh.userData.tail.rotation.y = Math.sin(f.phase)*0.6;
-      const fins = f.mesh.userData.fins||[]; fins.forEach((fin,idx)=>{ fin.rotation.z = Math.sin(f.phase + idx)*0.3; });
-      // hit tests
-      if (f.owner==='me') {
-        const d = f.mesh.position.distanceTo(foe.position.clone().add({x:0,y:0.8,z:0}));
-        if (d < 0.9) { registerHit('foe'); scene.remove(f.mesh); fishes.splice(i,1); continue; }
-      } else {
-        const d2 = f.mesh.position.distanceTo(camera.position.clone().add({x:0,y:0.8,z:0}));
-        if (d2 < 0.9) { registerHit('me'); scene.remove(f.mesh); fishes.splice(i,1); continue; }
-      }
-      // lifetime
-      if (f.mesh.position.length() > 400) { scene.remove(f.mesh); fishes.splice(i,1); }
-    }
+  function swingBaguette(owner='me'){
+    if (owner==='me' && !canSwing) return;
+    const startRot = local.baguette.rotation.z; const targetRot = startRot + 1.2; const t0 = performance.now(); const dur = 180;
+    (function anim(){ const u = Math.min(1, (performance.now()-t0)/dur); local.baguette.rotation.z = lerp(targetRot, startRot, (1-u)*(1-u)); if (u<1) requestAnimationFrame(anim); else local.baguette.rotation.z = startRot; })();
+    if (owner==='me') { canSwing=false; setTimeout(()=>canSwing=true, 450); SFX.swing(); if (remoteConnected && remote.alive) { const toEnemy = new THREE.Vector3().copy(remote.model.position).sub(camera.position); const dist = toEnemy.length(); const fwd = dirFromAngles(); const facing = toEnemy.normalize().dot(fwd); if (dist < 2.2 && facing > 0.6) { send({ t:'hit', kind:'melee' }); } } send({t:'swing'}); }
+  }
 
-    // Send state ~30 Hz
-    if (connected) {
-      const now = performance.now();
-      if (!lastPing || now-lastPing>33) {
-        send({ t:'state', p:[pos.x,pos.y,pos.z], r:[yaw,pitch] });
-        lastPing = now;
-      }
+  function updateProjectiles(dt){
+    for (let i=projectiles.length-1; i>=0; i--){
+      const p = projectiles[i];
+      p.mesh.position.addScaledVector(p.vel, dt);
+      p.mesh.rotation.y += dt*10;
+      p.ttl -= dt;
+      if (Math.abs(p.mesh.position.x) > world.size/2-0.5 || Math.abs(p.mesh.position.z) > world.size/2-0.5) p.ttl=0;
+      if (p.owner==='them' && local.alive) { if (p.mesh.position.distanceTo(camera.position) < 0.7) { onLocalHit('fish'); p.ttl=0; } }
+      if (p.ttl<=0){ releaseFish(p.mesh); projectiles.splice(i,1); }
     }
   }
 
-  // Render loop
-  function loop() {
-    const dt = Math.min(0.033, clock.getDelta());
-    step(dt);
+  function onLocalHit(){ if (!local.alive) return; local.hp = Math.max(0, local.hp-1); SFX.hit(); refreshHearts(); if (local.hp<=0){ local.alive=false; SFX.lose(); send({t:'dead'}); showToast('You lose'); } }
+  function onRemoteHit(){ if (!remote.alive) return; remote.hp = Math.max(0, (remote.hp||3)-1); if (remote.hp<=0){ remote.alive=false; SFX.win(); showToast('You win'); } }
+
+  // HUD
+  function refreshHearts(){
+    hud.innerHTML = '';
+    for (let i=0;i<3;i++){
+      const img = document.createElement('img'); img.className='heart'; img.alt='♥';
+      img.src = i < local.hp
+        ? 'data:image/svg+xml;utf8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ff356d"><path d="M12 21s-7.5-4.35-10-8.5C-0.5 8 2.5 4.5 6 6.2c2 .98 3.1 3.1 3.6 3.8.5-.7 1.6-2.82 3.6-3.8 3.5-1.7 6.5 1.8 4 6.3C19.5 16.65 12 21 12 21z"/></svg>`)
+        : 'data:image/svg+xml;utf8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#5b6370" stroke-width="2"><path d="M12 21s-7.5-4.35-10-8.5C-0.5 8 2.5 4.5 6 6.2c2 .98 3.1 3.1 3.6 3.8.5-.7 1.6-2.82 3.6-3.8 3.5-1.7 6.5 1.8 4 6.3C19.5 16.65 12 21 12 21z"/></svg>`);
+      hud.appendChild(img);
+    }
+  }
+
+  // Networking
+  let peer, conn, isHost=false, roomId; let remoteConnected=false;
+  function setupNetworking(){
+    roomId = ensureRoomUrl();
+    const hostId = 'room-' + roomId;
+    const forceClient = /[?&]client=1/.test(location.search);
+
+    if (!forceClient) {
+      isHost = true;
+      peer = new Peer(hostId, { debug:0 });
+      peer.on('open', ()=>{ setConnState('Waiting'); setShareLink(location.href); });
+      peer.on('connection', c=>{ if (remoteConnected){ c.close(); return; } conn = c; bindConn(); remoteConnected = true; setConnState('Connected'); });
+      peer.on('error', err=>{ if (String(err).includes('is taken')) { try{ peer.destroy(); }catch(_){} connectAsClient(hostId); } else { console.warn(err); showToast('Network error'); } });
+    } else { connectAsClient(hostId); }
+  }
+  function connectAsClient(hostId){ isHost=false; peer = new Peer(undefined, { debug:0 }); peer.on('open', ()=>{ conn = peer.connect(hostId, { reliable:true }); bindConn(); }); peer.on('error', err=>{ console.warn(err); showToast('Network error'); }); }
+  function bindConn(){ conn.on('open', ()=>{ remoteConnected=true; setConnState('Connected'); send({ t:'hello' }); }); conn.on('close', ()=>{ remoteConnected=false; setConnState('Disconnected'); }); conn.on('data', onNetData); }
+  function send(obj){ try{ conn && conn.open && conn.send(obj); } catch(_){} }
+  function setConnState(s){ connStateEl.textContent = s; }
+  function setShareLink(url){ shareLinkEl.textContent = url; }
+
+  function onNetData(msg){
+    switch(msg.t){
+      case 'hello': remote.model.visible = true; break;
+      case 'state': if (!remote.model.visible) remote.model.visible = true; remote.model.position.fromArray(msg.p); remote.model.rotation.y = msg.y; break;
+      case 'throw': { const fish = acquireFish(); fish.position.fromArray(msg.o); const p = { owner:'them', mesh:fish, vel:new THREE.Vector3().fromArray(msg.d), ttl:2.5 }; scene.add(fish); projectiles.push(p); } break;
+      case 'swing': break;
+      case 'hit': onRemoteHit(); break;
+      case 'dead': SFX.win(); showToast('You win'); break;
+    }
+  }
+
+  // Loop
+  let lastSend = 0;
+  function loop(){
+    const dt = Math.min(0.05, clock.getDelta());
+    updateMovement(dt);
+    updateProjectiles(dt);
+    const now = performance.now();
+    if (remoteConnected && now - lastSend > 50){ send({ t:'state', p:[camera.position.x, camera.position.y, camera.position.z], y: yaw }); lastSend = now; }
     renderer.render(scene, camera);
     requestAnimationFrame(loop);
   }
-  loop();
 
-  // Networking message handler
-  function handleNetMessage(data) {
-    try { var msg = JSON.parse(data); } catch { return; }
-    if (msg.t==='hello') { foe.name = msg.name || 'Opponent'; updateNames(); }
-    if (msg.t==='state' && Array.isArray(msg.p)) {
-      foe.position.set(msg.p[0], msg.p[1]-0.6, msg.p[2]);
-      // Rotate foe to face yaw
-      const y = msg.r?.[0]||0; foe.rotation.y = y;
-    }
-    if (msg.t==='throw') throwFish(false);
-    if (msg.t==='melee') { // did they hit us?
-      const toMe = camera.position.clone().sub(foe.position); const dist = toMe.length(); const facing = new THREE.Vector3(0,0,-1).applyEuler(new THREE.Euler(0, foe.rotation.y, 0)).dot(toMe.normalize());
-      if (dist < 2.2 && facing > 0.5) registerHit('me'); sfx('melee');
-    }
-    if (msg.t==='hit') { otherHP = Math.max(0, otherHP-1); if (otherHP===0) gameOver(true); }
-    if (msg.t==='youwin') gameOver(true);
-    if (msg.t==='name') { foe.name = msg.name; updateNames(); }
-    if (msg.t==='ping') { dc.send(JSON.stringify({t:'pong', n:msg.n})); }
-    if (msg.t==='pong') { const dt = performance.now()-msg.n; pingRTT=dt; $('#ping').textContent = `Ping ${Math.round(dt)} ms`; }
+  // Controls
+  function onClick(e){ if (e.button===0) throwFish('me'); if (e.button===2) swingBaguette('me'); }
+  function onContext(e){ e.preventDefault(); }
+  function respawn(){ local.hp=3; local.alive=true; refreshHearts(); showToast('Respawned'); pos.set(0,1.7, -world.size/4); yaw=0; pitch=0; }
+  function toggleMute(){ const m = SFX.toggle(); muteBtn.textContent = m? 'Unmute':'Mute'; }
+
+  copyBtn.addEventListener('click', async()=>{ try{ await navigator.clipboard.writeText(location.href); showToast('Link copied'); } catch(_){ showToast('Copy failed'); } });
+  muteBtn.addEventListener('click', toggleMute);
+
+  function start(){
+    overlay.style.display = 'none';
+    setupThree();
+    refreshHearts();
+    renderer.domElement.addEventListener('click', onClick);
+    renderer.domElement.addEventListener('contextmenu', onContext);
+    renderer.domElement.addEventListener('mousedown', ()=>{ if (document.pointerLockElement !== renderer.domElement) lockPointer(); });
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('keydown', e=>onKey(e,true));
+    window.addEventListener('keyup', e=>onKey(e,false));
+    if (SFX.ctx.state === 'suspended') SFX.ctx.resume();
+    setupNetworking();
+    setShareLink(location.href);
+    remote.model.position.set(0,0,-2);
+    clock.start();
+    loop();
   }
+  startBtn.addEventListener('click', start);
 
-  function updateNames() {
-    $('#names').innerHTML = nameTags.show? `<div>You: ${myName}</div><div>Rival: ${foe.name||'Opponent'}</div>` : '';
-  }
-
-  // Periodic ping
-  setInterval(()=>{ if (dc && dc.readyState==='open') dc.send(JSON.stringify({t:'ping', n:performance.now()})); }, 2000);
-
-  // Basic SFX
-  let audioCtx; let audioMuted = false;
-  function sfx(type) {
-    if (audioMuted) return;
-    audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)();
-    const o = audioCtx.createOscillator(); const g = audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination);
-    if (type==='throw') { o.type='triangle'; o.frequency.setValueAtTime(560,audioCtx.currentTime); g.gain.value=.04; g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime+0.2); }
-    else if (type==='melee') { o.type='square'; o.frequency.setValueAtTime(180,audioCtx.currentTime); g.gain.value=.07; g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime+0.08); }
-    else if (type==='hit') { o.type='sawtooth'; o.frequency.setValueAtTime(120,audioCtx.currentTime); g.gain.value=.08; g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime+0.3); }
-    o.start(); o.stop(audioCtx.currentTime+0.35);
-  }
-
-  // ====== UI wiring ======
-  $('#btnHost').onclick = hostFlow;
-  $('#btnJoin').onclick = ()=>{ $('#joinStep').style.display='block'; };
-  $('#btnRandom').onclick = quickPair;
-  $('#copyInvite').onclick = async ()=>{ try { await navigator.clipboard.writeText($('#inviteLink').value); toast('Invite link copied'); } catch{} };
-  $('#btnConnectAnswer').onclick = ()=>{ const a = $('#answerBox').value.trim(); if (!a) return; applyAnswer(a); };
-  $('#btnMakeAnswer').onclick = async ()=>{ const off = $('#offerBox').value.trim(); if (!off) return; await joinFlowFromOffer(off); };
-  $('#btnCopyAnswer').onclick = async (e)=>{ const v = e.target.dataset.answer; if (!v) return; try { await navigator.clipboard.writeText(v); toast('Answer copied'); } catch{} };
-
-  // Autofill from URL ?offer=
-  (function init() {
-    // Hearts init
-    updateHearts();
-    // Name randomize once
-    myName = localStorage.getItem('fishduel_name') || myName; localStorage.setItem('fishduel_name', myName);
-    updateNames();
-
-    const u = new URL(location.href);
-    const offer = u.searchParams.get('offer');
-    if (offer) { $('#connectPanel').scrollIntoView({behavior:'instant'}); $('#status').textContent = 'Offer detected from link'; joinFlowFromOffer(offer); }
-  })();
-
-  // Start overlay click
-  $('#startOverlay').addEventListener('click', ()=> canvas.requestPointerLock?.());
-
-  // Send our name after connect
-  setInterval(()=>{ if (connected) send({t:'name', name: myName}); }, 4000);
+  const room = ensureRoomUrl();
+  setShareLink(location.href);
 
   </script>
 </body>
