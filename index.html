@@ -277,21 +277,59 @@
   }
 
   // Networking
+  function getPeerOptions(){
+    const iceServers = [ { urls: 'stun:stun.l.google.com:19302' } ];
+    // Optional TURN configuration
+    // You can set a global TURN config via window.TURN_CONFIG = { urls:'turn:your-turn:3478', username:'user', credential:'pass' }
+    // Or via localStorage keys: turnUrl, turnUser, turnPass
+    const turnCfgGlobal = window.TURN_CONFIG;
+    if (turnCfgGlobal && turnCfgGlobal.urls) {
+      iceServers.push({ urls: turnCfgGlobal.urls, username: turnCfgGlobal.username, credential: turnCfgGlobal.credential });
+    } else {
+      const turnUrl = localStorage.getItem('turnUrl');
+      if (turnUrl) iceServers.push({ urls: turnUrl, username: localStorage.getItem('turnUser') || '', credential: localStorage.getItem('turnPass') || '' });
+    }
+    return {
+      debug: 2,
+      config: {
+        iceServers,
+        iceTransportPolicy: 'all'
+      }
+    };
+  }
+
   let peer, conn, isHost=false, roomId; let remoteConnected=false;
   function setupNetworking(){
+    // WebRTC requires http(s). Prevent running from file:// which breaks peers.
+    if (location.protocol === 'file:') {
+      setConnState('Serve via HTTP');
+      showToast('Open via http://localhost or https:// (WebRTC needs a secure context)');
+      return;
+    }
+
     roomId = ensureRoomUrl();
     const hostId = 'room-' + roomId;
     const forceClient = /[?&]client=1/.test(location.search);
+    const peerOpts = getPeerOptions();
 
     if (!forceClient) {
       isHost = true;
-      peer = new Peer(hostId, { debug:0 });
+      peer = new Peer(hostId, peerOpts);
       peer.on('open', ()=>{ setConnState('Waiting'); setShareLink(location.href); });
       peer.on('connection', c=>{ if (remoteConnected){ c.close(); return; } conn = c; bindConn(); remoteConnected = true; setConnState('Connected'); });
-      peer.on('error', err=>{ if (String(err).includes('is taken')) { try{ peer.destroy(); }catch(_){} connectAsClient(hostId); } else { console.warn(err); showToast('Network error'); } });
-    } else { connectAsClient(hostId); }
+      peer.on('error', err=>{
+        const msg = String(err||'');
+        if (msg.includes('is taken')) { try{ peer.destroy(); }catch(_){} connectAsClient(hostId, peerOpts); }
+        else { console.warn(err); showToast('Peer error: ' + msg); setConnState('Error'); }
+      });
+    } else { connectAsClient(hostId, peerOpts); }
   }
-  function connectAsClient(hostId){ isHost=false; peer = new Peer(undefined, { debug:0 }); peer.on('open', ()=>{ conn = peer.connect(hostId, { reliable:true }); bindConn(); }); peer.on('error', err=>{ console.warn(err); showToast('Network error'); }); }
+  function connectAsClient(hostId, peerOpts){
+    isHost=false;
+    peer = new Peer(undefined, peerOpts);
+    peer.on('open', ()=>{ conn = peer.connect(hostId, { reliable:true }); bindConn(); });
+    peer.on('error', err=>{ console.warn(err); showToast('Peer error: ' + String(err||'')); setConnState('Error'); });
+  }
   function bindConn(){ conn.on('open', ()=>{ remoteConnected=true; setConnState('Connected'); send({ t:'hello' }); }); conn.on('close', ()=>{ remoteConnected=false; setConnState('Disconnected'); }); conn.on('data', onNetData); }
   function send(obj){ try{ conn && conn.open && conn.send(obj); } catch(_){} }
   function setConnState(s){ connStateEl.textContent = s; }
