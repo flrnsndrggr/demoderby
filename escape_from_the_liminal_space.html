@@ -1,0 +1,1900 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Escape from the Liminal Space</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #0c0f12;
+    color: #e6e6e6;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial, sans-serif;
+    height: 100%;
+    overflow: hidden;
+  }
+  #wrap {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    grid-template-rows: 1fr;
+    grid-template-columns: 1fr;
+  }
+  canvas#game {
+    width: 100%;
+    height: 100%;
+    display: block;
+    background: #0a0c0f;
+    touch-action: none;
+  }
+  /* Minimal overlay UI for pause and settings */
+  .overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+  }
+  .overlay.visible { display: flex; }
+  .panel {
+    background: #101418;
+    border: 1px solid #2a3138;
+    border-radius: 8px;
+    padding: 16px 18px;
+    max-width: 480px;
+    width: calc(100% - 24px);
+    box-shadow: 0 10px 32px rgba(0,0,0,0.45);
+  }
+  .panel h1, .panel h2, .panel h3 { margin: 0 0 8px 0; line-height: 1.25; }
+  .panel p { margin: 8px 0; color: #b9c1c9; }
+  .panel button, .panel select, .panel input[type="checkbox"] {
+    font-size: 14px;
+  }
+  .row { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+  .spacer { height: 10px; }
+  .kbd {
+    display: inline-block;
+    border: 1px solid #58606a;
+    background: #11161b;
+    color: #d7dee6;
+    padding: 0 6px;
+    border-radius: 5px;
+    font-size: 12px;
+    box-shadow: inset 0 -2px 0 rgba(255,255,255,0.03);
+  }
+  .note { font-size: 12px; color: #90a0b0; }
+  .btn {
+    padding: 8px 10px;
+    border: 1px solid #3a4149;
+    background: #151a20;
+    border-radius: 6px;
+    color: #e6e6e6;
+    cursor: pointer;
+  }
+  .btn:active { transform: translateY(1px); }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  /* Virtual joystick */
+  #joystick {
+    position: absolute;
+    left: 14px;
+    bottom: 14px;
+    width: 140px;
+    height: 140px;
+    opacity: 0.25;
+    border-radius: 50%;
+    border: 2px solid #6f7a85;
+    display: none;
+    z-index: 3;
+  }
+  #stick {
+    position: absolute;
+    left: 70px; top: 70px;
+    margin-left: -22px; margin-top: -22px;
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    border: 2px solid #6f7a85;
+    background: #1a222a;
+  }
+  @media (hover: none) and (pointer: coarse) {
+    #joystick { display: block; }
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game" width="1280" height="720"></canvas>
+  <div id="pause" class="overlay">
+    <div class="panel">
+      <h2>Paused</h2>
+      <div class="row">
+        <button id="resumeBtn" class="btn">Resume</button>
+        <button id="restartBtn" class="btn">Restart Run</button>
+      </div>
+      <div class="spacer"></div>
+      <div class="two-col">
+        <div>
+          <h3>Mode</h3>
+          <div class="row">
+            <select id="modeSelect">
+              <option value="standard">Standard</option>
+              <option value="daily">Daily Seed</option>
+              <option value="practice">Practice</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <h3>Settings</h3>
+          <div class="row"><label><input id="audioOn" type="checkbox" checked> Audio</label></div>
+          <div class="row"><label><input id="minimapOn" type="checkbox" checked> Minimap</label></div>
+          <div class="row"><label><input id="autoOn" type="checkbox"> Auto Stealth Assist</label></div>
+          <div class="row"><label>Auto threshold <input id="autoThreshold" type="range" min="0.2" max="0.95" step="0.05" value="0.6"></label></div>
+        </div>
+      </div>
+      <div class="spacer"></div>
+      <p class="note">
+        Keys: <span class="kbd">WASD</span> move, <span class="kbd">Shift</span> Sneak, <span class="kbd">Z</span> Auto, <span class="kbd">V</span> Minimap, <span class="kbd">P</span> Pause, <span class="kbd">R</span> Restart, <span class="kbd">N</span> Mute, <span class="kbd">M</span> Debug, <span class="kbd">O</span> Settings.
+      </p>
+      <p class="note">Touch: joystick left for move, tap right to sneak. Minimap and pause buttons appear on screen.</p>
+    </div>
+  </div>
+  <div id="joystick"><div id="stick"></div></div>
+</div>
+<script>
+(() => {
+'use strict';
+
+/* =========================================================
+   Tiny utility library
+   ========================================================= */
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const clamp01 = x => clamp(x, 0, 1);
+const lerp = (a, b, t) => a + (b - a) * t;
+const dist2 = (ax, ay, bx, by) => {
+  const dx = ax - bx, dy = ay - by;
+  return dx*dx + dy*dy;
+};
+const len = (vx, vy) => Math.hypot(vx, vy);
+const norm = (vx, vy) => {
+  const l = Math.hypot(vx, vy);
+  return l > 1e-6 ? [vx / l, vy / l] : [0, 0];
+};
+const angleOf = (vx, vy) => Math.atan2(vy, vx);
+const dot = (ax, ay, bx, by) => ax*bx + ay*by;
+const sign = x => (x < 0 ? -1 : 1);
+const now = () => performance.now();
+
+// Seedable RNG (xmur3 + mulberry32)
+function xmur3(str) {
+  let h = 1779033703 ^ str.length;
+  for (let i = 0; i < str.length; i++) {
+    h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  return function() {
+    h = Math.imul(h ^ (h >>> 16), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    return (h ^= h >>> 16) >>> 0;
+  };
+}
+function mulberry32(a) {
+  return function() {
+    let t = (a += 0x6D2B79F5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+class RNG {
+  constructor(seed) { this.seed(seed); }
+  seed(seedStr) {
+    const h = xmur3(seedStr || 'seed')();
+    this._rand = mulberry32(h);
+  }
+  random() { return this._rand(); }
+  range(a, b) { return a + (b - a) * this._rand(); }
+  int(a, b) { return Math.floor(this.range(a, b + 1)); }
+  pick(arr) { return arr[this.int(0, arr.length - 1)]; }
+  shuffle(a) { for (let i=a.length-1;i>0;i--){const j=this.int(0,i);[a[i],a[j]]=[a[j],a[i]];} return a; }
+}
+
+// PRNG helpers
+function dailySeedString() {
+  const d = new Date();
+  const y = d.getUTCFullYear();
+  const m = d.getUTCMonth() + 1;
+  const day = d.getUTCDate();
+  return `daily-${y}-${m}-${day}`;
+}
+
+/* =========================================================
+   Save system
+   ========================================================= */
+const SAVE_KEYS = {
+  bestStandard: 'efs_best_scores_standard',
+  bestDaily: 'efs_best_scores_daily',
+  totalRuns: 'efs_total_runs',
+  accessibility: 'efs_accessibility',
+  settings: 'efs_settings'
+};
+const Save = {
+  read(key, def) {
+    try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : def; } catch(e){ return def; }
+  },
+  write(key, val) {
+    try { localStorage.setItem(key, JSON.stringify(val)); } catch(e){}
+  }
+};
+
+/* =========================================================
+   Audio (WebAudio minimal beeps)
+   ========================================================= */
+class AudioSys {
+  constructor() {
+    this.enabled = true;
+    this.ctx = null;
+    this.tickers = new Set();
+  }
+  ensure() {
+    if (!this.enabled) return;
+    if (!this.ctx) {
+      try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch(e){ this.enabled = false; }
+    }
+  }
+  beep(type='ui', vol=0.05, time=0.06, freq=400) {
+    if (!this.enabled) return;
+    this.ensure();
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = (type === 'tick') ? 'square' : 'sine';
+    o.frequency.value = freq;
+    g.gain.value = vol;
+    o.connect(g).connect(ctx.destination);
+    const t0 = ctx.currentTime;
+    o.start(t0);
+    o.stop(t0 + time);
+    g.gain.setValueAtTime(vol, t0);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + time);
+  }
+  setTicking(active) {
+    // Simple ticking rate limiter
+    if (!this.enabled) return;
+    if (active && !this._tickInterval) {
+      this.ensure();
+      this._tickInterval = setInterval(() => this.beep('tick', 0.02, 0.02, 650), 500);
+    } else if (!active && this._tickInterval) {
+      clearInterval(this._tickInterval);
+      this._tickInterval = null;
+    }
+  }
+  muteAll(muted) {
+    this.enabled = !muted;
+    if (muted) {
+      this.setTicking(false);
+      if (this.ctx) {
+        try { this.ctx.close(); } catch(e){}
+      }
+      this.ctx = null;
+    }
+  }
+}
+const audio = new AudioSys();
+
+/* =========================================================
+   Input (keyboard, mouse, touch, gamepad-lite)
+   ========================================================= */
+class Input {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.keys = new Map();
+    this.moveX = 0;
+    this.moveY = 0;
+    this.sneak = false;
+    this.auto = false;
+    this.minimap = true;
+    this.pausePressed = false;
+    this.muted = false;
+    this.debug = false;
+    this.settingsOpen = false;
+    this.touchSneak = false;
+    this.joyActive = false;
+    this.lastSampleVec = [0,0];
+    this.sampleMag = 0;
+    this._bindKeyboard();
+    this._bindTouch();
+  }
+  _bindKeyboard() {
+    const dk = e => {
+      const k = e.key.toLowerCase();
+      if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k)) e.preventDefault();
+      if (k === ' ') e.preventDefault();
+    };
+    window.addEventListener('keydown', dk, { passive: false });
+    window.addEventListener('keyup', dk, { passive: false });
+
+    window.addEventListener('keydown', e => {
+      const k = e.key.toLowerCase();
+      if (k === 'shift') this.sneak = true;
+      if (k === 'z') this.auto = !this.auto;
+      if (k === 'v') this.minimap = !this.minimap;
+      if (k === 'p') this.pausePressed = true;
+      if (k === 'n') this.muted = !this.muted;
+      if (k === 'm') this.debug = !this.debug;
+      if (k === 'o') this.settingsOpen = !this.settingsOpen;
+      if (k === 'r') this.requestRestart = true;
+      this.keys.set(k, true);
+    });
+    window.addEventListener('keyup', e => {
+      const k = e.key.toLowerCase();
+      if (k === 'shift') this.sneak = false;
+      this.keys.set(k, false);
+    });
+  }
+  _bindTouch() {
+    const joy = document.getElementById('joystick');
+    const stick = document.getElementById('stick');
+    const rect = () => joy.getBoundingClientRect();
+    let base = { x: 0, y: 0 };
+
+    const setStick = (dx, dy) => {
+      const R = 56; // radius within ring
+      const L = Math.hypot(dx, dy);
+      const s = L > R ? R / L : 1;
+      stick.style.left = (70 + dx * s) + 'px';
+      stick.style.top  = (70 + dy * s) + 'px';
+      const nx = clamp(dx / R, -1, 1);
+      const ny = clamp(dy / R, -1, 1);
+      this.moveX = nx;
+      this.moveY = ny;
+      this.joyActive = true;
+    };
+
+    const clearStick = () => {
+      stick.style.left = '70px';
+      stick.style.top = '70px';
+      this.moveX = 0;
+      this.moveY = 0;
+      this.joyActive = false;
+    };
+
+    joy.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      const r = rect();
+      base.x = r.left + r.width * 0.5;
+      base.y = r.top + r.height * 0.5;
+      setStick(e.clientX - base.x, e.clientY - base.y);
+      joy.setPointerCapture(e.pointerId);
+    });
+    joy.addEventListener('pointermove', e => {
+      if (!joy.hasPointerCapture(e.pointerId)) return;
+      setStick(e.clientX - base.x, e.clientY - base.y);
+    });
+    joy.addEventListener('pointerup', e => {
+      clearStick();
+      joy.releasePointerCapture(e.pointerId);
+    });
+
+    // Right side tap to toggle sneak
+    window.addEventListener('pointerdown', e => {
+      const w = window.innerWidth;
+      const threshold = w * 0.6;
+      if (e.clientX > threshold) {
+        this.sneak = true;
+        this.touchSneak = true;
+      }
+    }, { passive: true });
+    window.addEventListener('pointerup', e => {
+      if (this.touchSneak) {
+        this.sneak = false;
+        this.touchSneak = false;
+      }
+    }, { passive: true });
+  }
+  isDown(k) { return !!this.keys.get(k); }
+  axis() {
+    let x = 0, y = 0;
+    if (this.isDown('a') || this.isDown('arrowleft')) x -= 1;
+    if (this.isDown('d') || this.isDown('arrowright')) x += 1;
+    if (this.isDown('w') || this.isDown('arrowup')) y -= 1;
+    if (this.isDown('s') || this.isDown('arrowdown')) y += 1;
+    if (this.joyActive) {
+      x = this.moveX;
+      y = this.moveY;
+    }
+    const l = Math.hypot(x, y);
+    if (l > 1) { x /= l; y /= l; }
+    this.lastSampleVec = [x, y];
+    this.sampleMag = l;
+    return [x, y];
+  }
+  isMoving() {
+    const [x, y] = this.lastSampleVec;
+    if (Math.hypot(x, y) > 0.01) return true;
+    // keyboard fallback if axis not called yet
+    return this.isDown('w') || this.isDown('a') || this.isDown('s') || this.isDown('d') ||
+           this.isDown('arrowup') || this.isDown('arrowleft') || this.isDown('arrowdown') || this.isDown('arrowright') ||
+           this.joyActive;
+  }
+}
+/* =========================================================
+   Renderer and viewport scaling
+   ========================================================= */
+class Renderer {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.pixelRatio = Math.min(2, window.devicePixelRatio || 1);
+    this.resize();
+    window.addEventListener('resize', () => this.resize());
+  }
+  resize() {
+    const pr = this.pixelRatio;
+    const w = Math.floor(window.innerWidth * pr);
+    const h = Math.floor(window.innerHeight * pr);
+    this.canvas.width = w;
+    this.canvas.height = h;
+    this.canvas.style.width = (w / pr) + 'px';
+    this.canvas.style.height = (h / pr) + 'px';
+    this.width = w;
+    this.height = h;
+  }
+  clear() {
+    const c = this.ctx;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.clearRect(0, 0, this.width, this.height);
+    c.fillStyle = '#0a0c0f';
+    c.fillRect(0, 0, this.width, this.height);
+  }
+}
+
+/* =========================================================
+   Grid and level structures
+   ========================================================= */
+class Grid {
+  constructor(cols, rows, tile) {
+    this.cols = cols;
+    this.rows = rows;
+    this.tile = tile;
+    this.solid = new Uint8Array(cols * rows); // 1=wall or dynamic block
+  }
+  idx(x, y) { return y * this.cols + x; }
+  inBounds(x, y) { return x >= 0 && y >= 0 && x < this.cols && y < this.rows; }
+  isSolid(x, y) { return !this.inBounds(x, y) ? true : this.solid[this.idx(x, y)] === 1; }
+  setSolid(x, y, v) { if (this.inBounds(x, y)) this.solid[this.idx(x, y)] = v ? 1 : 0; }
+  each(fn) {
+    for (let y = 0; y < this.rows; y++) {
+      for (let x = 0; x < this.cols; x++) fn(x, y, this.isSolid(x, y));
+    }
+  }
+}
+/* =========================================================
+   Collision: circle vs static grid, slide response
+   ========================================================= */
+function circleGridSlide(px, py, r, vx, vy, grid) {
+  // Resolve collisions by sampling neighboring tiles around the circle
+  let cx = px, cy = py, rvx = vx, rvy = vy;
+  const t = grid.tile;
+  const minX = Math.floor((px - r) / t) - 1;
+  const maxX = Math.floor((px + r) / t) + 1;
+  const minY = Math.floor((py - r) / t) - 1;
+  const maxY = Math.floor((py + r) / t) + 1;
+
+  for (let y = minY; y <= maxY; y++) {
+    for (let x = minX; x <= maxX; x++) {
+      if (!grid.isSolid(x, y)) continue;
+      const rx = x * t, ry = y * t;
+      const rw = t, rh = t;
+      // Closest point on rect to circle center
+      const closestX = clamp(cx, rx, rx + rw);
+      const closestY = clamp(cy, ry, ry + rh);
+      const dx = cx - closestX;
+      const dy = cy - closestY;
+      const d2 = dx*dx + dy*dy;
+      if (d2 < r*r) {
+        const d = Math.sqrt(d2) || 1e-6;
+        const nx = dx / d, ny = dy / d;
+        const pen = r - d;
+        // Push out
+        cx += nx * pen;
+        cy += ny * pen;
+        // Slide velocity along tangent
+        const vn = rvx * nx + rvy * ny;
+        if (vn < 0) { // only if moving into the wall
+          rvx -= vn * nx;
+          rvy -= vn * ny;
+        }
+      }
+    }
+  }
+  return [cx, cy, rvx, rvy];
+}
+
+/* =========================================================
+   Field of View and Line of Sight
+   ========================================================= */
+function hasLineOfSight(ax, ay, bx, by, grid) {
+  // Bresenham-like ray march on grid
+  const t = grid.tile;
+  const dx = bx - ax, dy = by - ay;
+  const steps = Math.ceil(Math.hypot(dx, dy) / (t * 0.25));
+  if (steps <= 0) return true;
+  for (let i = 1; i <= steps; i++) {
+    const px = ax + (dx * i) / steps;
+    const py = ay + (dy * i) / steps;
+    const tx = Math.floor(px / t);
+    const ty = Math.floor(py / t);
+    if (grid.isSolid(tx, ty)) return false;
+  }
+  return true;
+}
+function withinFOV(fwdx, fwdy, toX, toY, fovDeg) {
+  const a = Math.atan2(fwdy, fwdx);
+  const b = Math.atan2(toY, toX);
+  let d = Math.abs(a - b);
+  if (d > Math.PI) d = 2 * Math.PI - d;
+  return d <= (fovDeg * Math.PI / 180) * 0.5 + 1e-6;
+}
+
+/* =========================================================
+   A* pathfinding worker
+   ========================================================= */
+function createPathWorker() {
+  const code = `
+    let cols = 0, rows = 0, grid = null;
+    function key(x,y){return y*cols+x;}
+    function inB(x,y){return x>=0&&y>=0&&x<cols&&y<rows;}
+    function solid(x,y){return !inB(x,y) || grid[key(x,y)]===1;}
+    function neighbors(x,y){
+      const res = [];
+      // 4 cardinal
+      const cs = [[1,0],[ -1,0],[0,1],[0,-1]];
+      for(const [dx,dy] of cs){ const nx=x+dx, ny=y+dy; if(!solid(nx,ny)) res.push([nx,ny,1]); }
+      // 4 diag with no corner cutting
+      const ds = [[1,1],[1,-1],[-1,1],[-1,-1]];
+      for(const [dx,dy] of ds){
+        const nx=x+dx, ny=y+dy;
+        if (solid(nx,ny)) continue;
+        if (solid(x+dx, y) || solid(x, y+dy)) continue;
+        res.push([nx,ny,Math.SQRT2]);
+      }
+      return res;
+    }
+    function h(ax,ay,bx,by){return Math.hypot(ax-bx, ay-by);}
+    function astar(sx,sy,gx,gy) {
+      const start = key(sx,sy), goal = key(gx,gy);
+      const open = new Set([start]);
+      const came = new Map();
+      const gScore = new Map(); gScore.set(start,0);
+      const fScore = new Map(); fScore.set(start, h(sx,sy,gx,gy));
+      const pq = [[fScore.get(start), start]];
+      function popMin(){
+        let best = 0;
+        for(let i=1;i<pq.length;i++) if(pq[i][0] < pq[best][0]) best = i;
+        return pq.splice(best,1)[0][1];
+      }
+      const i2xy = i => [i%cols, (i/cols|0)];
+      while(open.size>0){
+        const current = popMin();
+        open.delete(current);
+        const [cx,cy] = i2xy(current);
+        if (current === goal) {
+          // reconstruct
+          const path = [[cx,cy]];
+          let cur = current;
+          while (came.has(cur)) {
+            cur = came.get(cur);
+            const [x,y] = i2xy(cur);
+            path.push([x,y]);
+          }
+          path.reverse();
+          return path;
+        }
+        for(const [nx,ny,w] of neighbors(cx,cy)){
+          const nk = key(nx,ny);
+          const tent = (gScore.get(current) ?? Infinity) + w;
+          if (tent < (gScore.get(nk) ?? Infinity)) {
+            came.set(nk, current);
+            gScore.set(nk, tent);
+            const f = tent + h(nx,ny,gx,gy);
+            fScore.set(nk, f);
+            open.add(nk);
+            pq.push([f, nk]);
+          }
+        }
+      }
+      return null;
+    }
+    onmessage = (e) => {
+      const msg = e.data;
+      if (msg.type === 'grid') {
+        cols = msg.cols; rows = msg.rows; grid = msg.grid;
+        postMessage({ type: 'gridAck' });
+      } else if (msg.type === 'path') {
+        const p = astar(msg.sx, msg.sy, msg.gx, msg.gy);
+        postMessage({ type: 'path', id: msg.id, path: p });
+      }
+    };
+  `;
+  const blob = new Blob([code], { type: 'application/javascript' });
+  const url = URL.createObjectURL(blob);
+  const worker = new Worker(url);
+  return worker;
+}
+
+/* =========================================================
+   Entities
+   ========================================================= */
+class Player {
+  constructor() {
+    this.x = 0; this.y = 0;
+    this.vx = 0; this.vy = 0;
+    this.r = 0.36; // tiles
+    this.maxSpeedBase = 3.5; // tiles per second desktop; lowered on mobile later
+    this.maxSpeed = this.maxSpeedBase;
+    this.accelBase = 20.0; // tiles/s^2
+    this.accel = this.accelBase;
+    this.friction = 8.0; // tiles/s^2
+    this.sneak = false;
+    this.stealth = 0;
+    this.noise = 0;
+    this.scoreTime = 0;
+    this.shieldStacks = 0; // P
+    this.invulnT = 0;
+    this.autoMode = false;
+    this.autoThreshold = 0.6; // target minimum stealth
+  }
+  tilePos(grid) {
+    return [Math.floor(this.x), Math.floor(this.y)];
+  }
+}
+
+const POWER_TYPES = ['S','F','D','P','X','R','C'];
+
+class PowerUp {
+  constructor(type, x, y) {
+    this.type = type;
+    this.x = x; this.y = y;
+    this.r = 0.33;
+    this.active = true;
+  }
+}
+
+class Bot {
+  constructor(kind, x, y, cfg) {
+    this.kind = kind; // 'normal' | 'stalker' | 'phase'
+    this.x = x; this.y = y;
+    this.vx = 0; this.vy = 0;
+    this.forward = [1, 0];
+    this.speedBase = cfg.baseSpeed; // tiles/s baseline
+    this.speed = this.speedBase;
+    this.rsMin = cfg.RsMin; this.rsMax = cfg.RsMax;
+    this.fovMin = cfg.FOVMin; this.fovMax = cfg.FOVMax;
+    this.rhBase = cfg.RhBase; this.rhGain = cfg.RhGain;
+    this.state = 'patrol'; // patrol, chase, search
+    this.lsp = null; // last seen position
+    this.searchPoints = [];
+    this.searchIndex = 0;
+    this.searchTimer = 0;
+    this.plan = []; // path tiles
+    this.planIdx = 0;
+    this.replanInterval = cfg.replanInterval;
+    this.replanTimer = 0;
+    this.pathfindCooldown = 0;
+    this.stillTimer = 0; // for phase minimap reveal
+  }
+}
+
+/* =========================================================
+   Game state
+   ========================================================= */
+const GameMode = { Standard: 'standard', Daily: 'daily', Practice: 'practice' };
+
+class Game {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.r = new Renderer(canvas);
+    this.input = new Input(canvas);
+    this.mode = GameMode.Standard;
+    this.level = 1;
+    this.rng = new RNG('init');
+    this.grid = new Grid(64, 36, 24); // cols, rows, tile size in pixels
+    this.tilePixels = 24;
+    this.player = new Player();
+    this.bots = [];
+    this.powerups = [];
+    this.exit = { x: 0, y: 0, w: 1, h: 1 };
+    this.minimap = { on: true, lastUpdate: 0, cache: null };
+    this.debug = false;
+    this.running = true;
+    this.paused = false;
+    this.settingsOpen = false;
+    this.audioOn = true;
+    this.totalRuns = Save.read(SAVE_KEYS.totalRuns, 0) || 0;
+    this.bestStandard = Save.read(SAVE_KEYS.bestStandard, []);
+    this.bestDaily = Save.read(SAVE_KEYS.bestDaily, []);
+    this.activePowerups = []; // { type, time }
+    this.powerupAudioTick = false;
+    this.stats = { survival: 0 };
+    this.score = 0;
+    this.frameTimeAvg = 0;
+    this.mobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    if (this.mobile) {
+      this.player.maxSpeedBase = 3.0;
+    }
+    this.player.maxSpeed = this.player.maxSpeedBase;
+    this.player.accel = this.player.accelBase;
+    this.worker = null;
+    this.workerAlive = false;
+    this._initWorker();
+    this._bindUI();
+    this._resizeToFit();
+    this._newRun();
+  }
+
+  _initWorker() {
+    try {
+      this.worker = createPathWorker();
+      this.worker.onmessage = e => {
+        const msg = e.data;
+        if (msg.type === 'gridAck') {
+          this.workerAlive = true;
+        } else if (msg.type === 'path') {
+          const job = this._pendingPaths.get(msg.id);
+          if (job) {
+            job.resolve(msg.path);
+            this._pendingPaths.delete(msg.id);
+          }
+        }
+      };
+      this.worker.onerror = () => { this.workerAlive = false; };
+      this._pendingPaths = new Map();
+    } catch(e) {
+      this.worker = null;
+      this.workerAlive = false;
+    }
+  }
+  _syncGridToWorker() {
+    if (!this.workerAlive || !this.worker) return;
+    this.worker.postMessage({ type: 'grid', cols: this.grid.cols, rows: this.grid.rows, grid: this.grid.solid });
+  }
+  requestPath(sx, sy, gx, gy) {
+    // Returns a Promise that resolves to a path array or null
+    if (this.workerAlive && this.worker) {
+      const id = Math.random().toString(36).slice(2);
+      const promise = new Promise((resolve) => {
+        this._pendingPaths.set(id, { resolve });
+      });
+      this.worker.postMessage({ type: 'path', id, sx, sy, gx, gy });
+      return promise;
+    } else {
+      // Fallback: run local A* synchronously
+      const path = this._astarLocal(sx, sy, gx, gy);
+      return Promise.resolve(path);
+    }
+  }
+  _astarLocal(sx, sy, gx, gy) {
+    // Same as worker but inline
+    const cols = this.grid.cols, rows = this.grid.rows;
+    const key = (x,y) => y*cols + x;
+    const inB = (x,y) => x>=0 && y>=0 && x<cols && y<rows;
+    const solid = (x,y) => !inB(x,y) || this.grid.isSolid(x,y);
+    const neighbors = (x,y) => {
+      const res = [];
+      const cs = [[1,0],[-1,0],[0,1],[0,-1]];
+      for (const [dx,dy] of cs) { const nx=x+dx, ny=y+dy; if (!solid(nx,ny)) res.push([nx,ny,1]); }
+      const ds = [[1,1],[1,-1],[-1,1],[-1,-1]];
+      for (const [dx,dy] of ds) {
+        const nx=x+dx, ny=y+dy;
+        if (solid(nx,ny)) continue;
+        if (solid(x+dx, y) || solid(x, y+dy)) continue;
+        res.push([nx,ny,Math.SQRT2]);
+      }
+      return res;
+    };
+    const h = (ax,ay,bx,by) => Math.hypot(ax-bx, ay-by);
+    const start = key(sx,sy), goal = key(gx,gy);
+    const open = new Set([start]);
+    const came = new Map();
+    const gScore = new Map(); gScore.set(start,0);
+    const fScore = new Map(); fScore.set(start, h(sx,sy,gx,gy));
+    const pq = [[fScore.get(start), start]];
+    const i2xy = i => [i%cols, (i/cols|0)];
+    function popMin(){
+      let best = 0;
+      for(let i=1;i<pq.length;i++) if(pq[i][0] < pq[best][0]) best = i;
+      return pq.splice(best,1)[0][1];
+    }
+    while(open.size>0){
+      const current = popMin();
+      open.delete(current);
+      const [cx,cy] = i2xy(current);
+      if (current === goal) {
+        const path = [[cx,cy]];
+        let cur = current;
+        while (came.has(cur)) {
+          cur = came.get(cur);
+          const [x,y] = i2xy(cur);
+          path.push([x,y]);
+        }
+        path.reverse();
+        return path;
+      }
+      for(const [nx,ny,w] of neighbors(cx,cy)){
+        const nk = key(nx,ny);
+        const tent = (gScore.get(current) ?? Infinity) + w;
+        if (tent < (gScore.get(nk) ?? Infinity)) {
+          came.set(nk, current);
+          gScore.set(nk, tent);
+          const f = tent + h(nx,ny,gx,gy);
+          fScore.set(nk, f);
+          open.add(nk);
+          pq.push([f, nk]);
+        }
+      }
+    }
+    return null;
+  }
+
+  _bindUI() {
+    const pause = document.getElementById('pause');
+    const resumeBtn = document.getElementById('resumeBtn');
+    const restartBtn = document.getElementById('restartBtn');
+    const audioOn = document.getElementById('audioOn');
+    const minimapOn = document.getElementById('minimapOn');
+    const autoOn = document.getElementById('autoOn');
+    const autoThreshold = document.getElementById('autoThreshold');
+    const modeSelect = document.getElementById('modeSelect');
+
+    resumeBtn.onclick = () => this._togglePause(false);
+    restartBtn.onclick = () => { this._togglePause(false); this._newRun(); };
+
+    audioOn.onchange = () => {
+      this.audioOn = audioOn.checked;
+      audio.muteAll(!this.audioOn);
+      Save.write(SAVE_KEYS.settings, this._settingsState());
+    };
+    minimapOn.onchange = () => {
+      this.minimap.on = minimapOn.checked;
+      Save.write(SAVE_KEYS.settings, this._settingsState());
+    };
+    autoOn.onchange = () => {
+      this.player.autoMode = autoOn.checked;
+      Save.write(SAVE_KEYS.accessibility, { auto: this.player.autoMode, threshold: this.player.autoThreshold });
+    };
+    autoThreshold.oninput = () => {
+      this.player.autoThreshold = parseFloat(autoThreshold.value);
+      Save.write(SAVE_KEYS.accessibility, { auto: this.player.autoMode, threshold: this.player.autoThreshold });
+    };
+    modeSelect.onchange = () => {
+      const v = modeSelect.value;
+      this.mode = v;
+      this._newRun();
+    };
+
+    // Load saved
+    const sett = Save.read(SAVE_KEYS.settings, null);
+    if (sett) {
+      this.audioOn = !!sett.audioOn; audioOn.checked = this.audioOn; audio.muteAll(!this.audioOn);
+      this.minimap.on = !!sett.minimapOn; minimapOn.checked = this.minimap.on;
+    } else {
+      Save.write(SAVE_KEYS.settings, this._settingsState());
+    }
+    const acc = Save.read(SAVE_KEYS.accessibility, null);
+    if (acc) {
+      this.player.autoMode = !!acc.auto; autoOn.checked = this.player.autoMode;
+      this.player.autoThreshold = acc.threshold ?? 0.6; autoThreshold.value = this.player.autoThreshold;
+    } else {
+      Save.write(SAVE_KEYS.accessibility, { auto: this.player.autoMode, threshold: this.player.autoThreshold });
+    }
+    modeSelect.value = this.mode;
+  }
+  _settingsState() {
+    return { audioOn: this.audioOn, minimapOn: this.minimap.on };
+  }
+
+  _resizeToFit() {
+    // Adjust grid to screen while keeping tile pixel size ~24..32
+    const pr = this.r.pixelRatio;
+    const w = this.r.width, h = this.r.height;
+    let tile = 28 * pr;
+    const cols = Math.max(32, Math.floor(w / tile));
+    const rows = Math.max(18, Math.floor(h / tile));
+    tile = Math.floor(Math.min(w / cols, h / rows));
+    this.grid = new Grid(cols, rows, tile);
+    this.tilePixels = tile;
+    this._syncGridToWorker();
+  }
+
+  _newRun() {
+    // Set RNG based on mode
+    if (this.mode === GameMode.Daily) {
+      this.rng.seed(dailySeedString());
+    } else {
+      this.rng.seed(`std-${Math.random()}`);
+    }
+    this.level = 1;
+    this.score = 0;
+    this.stats = { survival: 0, wasDaily: this.mode === GameMode.Daily };
+    this._newLevel();
+  }
+
+  _newLevel() {
+    const lvl = this.level;
+    this._generateLevel(lvl);
+    this.player.vx = 0; this.player.vy = 0; this.player.invulnT = 0;
+    this.activePowerups.length = 0;
+    audio.setTicking(false);
+    this._syncGridToWorker();
+  }
+
+  _generateLevel(level) {
+    const g = this.grid;
+    // Clear grid
+    g.solid.fill(0);
+    // Borders solid
+    for (let x = 0; x < g.cols; x++) { g.setSolid(x, 0, 1); g.setSolid(x, g.rows - 1, 1); }
+    for (let y = 0; y < g.rows; y++) { g.setSolid(0, y, 1); g.setSolid(g.cols - 1, y, 1); }
+
+    const p = clamp(0.14 + 0.01 * level, 0.14, 0.28);
+    for (let y = 1; y < g.rows - 1; y++) {
+      for (let x = 1; x < g.cols - 1; x++) {
+        if (Math.random() < 0.05) continue; // light blue-noise sparsity
+        if (this.rng.random() < p) g.setSolid(x, y, 1);
+      }
+    }
+    // Spawn and exit: opposite edges
+    const spawn = [2, Math.floor(this.rng.range(2, g.rows - 3))];
+    const exit = [g.cols - 3, Math.floor(this.rng.range(2, g.rows - 3))];
+
+    // Carve primary path via A*
+    const carvePath = () => {
+      // Ensure walkable start and goal
+      g.setSolid(spawn[0], spawn[1], 0);
+      g.setSolid(exit[0], exit[1], 0);
+      const path = this._astarLocal(spawn[0], spawn[1], exit[0], exit[1]);
+      if (!path) return null;
+      // Carve along path
+      for (const [x,y] of path) {
+        g.setSolid(x, y, 0);
+        // widen corridor a bit
+        const ns = [[1,0],[-1,0],[0,1],[0,-1]];
+        for (const [dx,dy] of ns) if (this.rng.random() < 0.3) g.setSolid(x+dx, y+dy, 0);
+      }
+      return path;
+    };
+    let path = carvePath();
+    let tries = 0;
+    while (!path && tries < 16) { // regenerate base noise
+      for (let y = 1; y < g.rows - 1; y++) {
+        for (let x = 1; x < g.cols - 1; x++) {
+          g.setSolid(x, y, this.rng.random() < p ? 1 : 0);
+        }
+      }
+      path = carvePath();
+      tries++;
+    }
+    if (!path) {
+      // give up and make mostly empty
+      for (let y = 1; y < g.rows - 1; y++) for (let x = 1; x < g.cols - 1; x++) g.setSolid(x, y, 0);
+      path = this._astarLocal(spawn[0], spawn[1], exit[0], exit[1]) || [[spawn[0],spawn[1]],[exit[0],exit[1]]];
+    }
+
+    // Add side routes by punching holes near the path
+    for (let i = 0; i < Math.floor(path.length * 0.25); i++) {
+      const [px, py] = path[this.rng.int(0, path.length - 1)];
+      const cx = px + this.rng.int(-2, 2);
+      const cy = py + this.rng.int(-2, 2);
+      if (g.inBounds(cx, cy)) g.setSolid(cx, cy, 0);
+    }
+
+    // Avoid 1-tile dead ends at spawn or exit
+    const noDeadEnd = (x, y) => {
+      const ns = [[1,0],[-1,0],[0,1],[0,-1]];
+      let walls = 0;
+      for (const [dx,dy] of ns) if (g.isSolid(x+dx, y+dy)) walls++;
+      if (walls >= 3) {
+        for (const [dx,dy] of ns) g.setSolid(x+dx, y+dy, 0);
+      }
+    };
+    noDeadEnd(spawn[0], spawn[1]);
+    noDeadEnd(exit[0], exit[1]);
+
+    // Assign positions
+    this.player.x = spawn[0] + 0.5;
+    this.player.y = spawn[1] + 0.5;
+    this.exit = { x: exit[0], y: exit[1], w: 1, h: 1 };
+
+    // Place power ups: two per level, avoid spawn, exit, same quadrant
+    this.powerups.length = 0;
+    const quads = (x,y) => (x < g.cols/2 ? 0 : 1) | (y < g.rows/2 ? 0 : 2);
+    const placed = new Set();
+    let attempts = 0;
+    while (this.powerups.length < 2 && attempts < 200) {
+      attempts++;
+      const tx = this.rng.int(2, g.cols - 3);
+      const ty = this.rng.int(2, g.rows - 3);
+      if (g.isSolid(tx,ty)) continue;
+      if (dist2(tx+0.5, ty+0.5, this.player.x, this.player.y) < 9) continue;
+      if (Math.abs(tx - exit[0]) + Math.abs(ty - exit[1]) < 2) continue;
+      const q = quads(tx, ty);
+      if (placed.has(q)) continue;
+      // Prefer tiles near but not on the path
+      let nearPath = false;
+      for (const [px,py] of path) {
+        if (Math.abs(px - tx) + Math.abs(py - ty) === 1) { nearPath = true; break; }
+      }
+      if (!nearPath && this.rng.random() < 0.5) continue;
+      const type = this.rng.pick(POWER_TYPES);
+      this.powerups.push(new PowerUp(type, tx+0.5, ty+0.5));
+      placed.add(q);
+    }
+
+    // Place bots: 1 per level
+    this.bots.length = 0;
+    for (let i = 0; i < level; i++) {
+      let bx=0, by=0, ok=false, guard=0;
+      while(!ok && guard++ < 500) {
+        bx = this.rng.int(2, g.cols - 3) + 0.5;
+        by = this.rng.int(2, g.rows - 3) + 0.5;
+        if (g.isSolid(Math.floor(bx), Math.floor(by))) continue;
+        const farFromPlayer = Math.hypot(bx - this.player.x, by - this.player.y) >= 8;
+        const farFromExit = Math.hypot(bx - (this.exit.x+0.5), by - (this.exit.y+0.5)) >= 8;
+        ok = farFromPlayer && farFromExit;
+      }
+      const special = this.rng.random() < 0.25;
+      let kind = 'normal';
+      if (special) kind = this.rng.pick(['stalker', 'phase']);
+      const levelCfg = botCapsForLevel(level);
+      const baseSpeed = 0.91 * this.player.maxSpeed; // baseline relative to player max
+      const cfg = { baseSpeed, ...levelCfg };
+      const bot = new Bot(kind, bx, by, cfg);
+      if (kind === 'stalker') bot.speed = baseSpeed * 0.8;
+      this.bots.push(bot);
+    }
+
+    // Dynamic objects: mover blocks and teleporters
+    this.movers = []; // {x,y,axis,dir,phase}
+    this.teleporters = []; // {x,y,timer}
+    // Place a few mover blocks
+    const moversToPlace = Math.min(6, Math.floor(level * 0.6));
+    let mplaced = 0, guardM = 0;
+    while (mplaced < moversToPlace && guardM++ < 500) {
+      const x = this.rng.int(2, g.cols - 3);
+      const y = this.rng.int(2, g.rows - 3);
+      if (g.isSolid(x,y)) continue;
+      if (dist2(x+0.5,y+0.5,this.player.x,this.player.y) < 6) continue;
+      g.setSolid(x,y,1);
+      this.movers.push({ x, y, axis: (y % 2 === 0 ? 'x' : 'y'), dir: this.rng.random()<0.5? -1: 1, offset:0 });
+      mplaced++;
+    }
+    if (level >= 4 && ((level - 4) % 3 === 0)) {
+      let tplaced = 0, guardT = 0;
+      while (tplaced < 1 && guardT++ < 500) {
+        const x = this.rng.int(2, g.cols - 3);
+        const y = this.rng.int(2, g.rows - 3);
+        if (g.isSolid(x,y)) continue;
+        g.setSolid(x,y,1);
+        this.teleporters.push({ x, y, timer: this.rng.range(3,6) });
+        tplaced++;
+      }
+    }
+  }
+
+  /* =======================================================
+     Level bracket caps
+     ======================================================= */
+  // Balancing table 12.1
+  _capsForLevel(level) {
+    if (level <= 3) return { RsMin: 4, RsMax: 9, FOVMin: 90, FOVMax: 135, RhBase: 2, RhGain: 6, replanInterval: 0.8 };
+    if (level <= 7) return { RsMin: 5, RsMax: 10, FOVMin: 100, FOVMax: 150, RhBase: 2, RhGain: 7, replanInterval: 0.6 };
+    if (level <= 12) return { RsMin: 6, RsMax: 11, FOVMin: 110, FOVMax: 160, RhBase: 3, RhGain: 8, replanInterval: 0.45 };
+    return { RsMin: 6, RsMax: 12, FOVMin: 120, FOVMax: 170, RhBase: 3, RhGain: 9, replanInterval: 0.35 };
+  }
+}
+function botCapsForLevel(level) {
+  const g = new Game(document.createElement('canvas')); // not used, but for function cohesion you could inline
+  // Above is not needed; use caps function directly below
+  return (level <= 3)
+    ? { RsMin: 4, RsMax: 9, FOVMin: 90, FOVMax: 135, RhBase: 2, RhGain: 6, replanInterval: 0.8 }
+    : (level <= 7)
+      ? { RsMin: 5, RsMax: 10, FOVMin: 100, FOVMax: 150, RhBase: 2, RhGain: 7, replanInterval: 0.6 }
+      : (level <= 12)
+        ? { RsMin: 6, RsMax: 11, FOVMin: 110, FOVMax: 160, RhBase: 3, RhGain: 8, replanInterval: 0.45 }
+        : { RsMin: 6, RsMax: 12, FOVMin: 120, FOVMax: 170, RhBase: 3, RhGain: 9, replanInterval: 0.35 };
+}
+
+/* =========================================================
+   Stealth and noise
+   ========================================================= */
+function sampleCover(playerX, playerY, grid, radiusTiles = 3) {
+  const t = grid.tile;
+  const R = radiusTiles * t;
+  let occluded = 0;
+  const samples = 16;
+  for (let i = 0; i < samples; i++) {
+    const ang = (i / samples) * Math.PI * 2;
+    const dx = Math.cos(ang), dy = Math.sin(ang);
+    // Ray march outward, if any block occludes then count
+    let blocked = false;
+    const steps = Math.ceil(R / (t * 0.5));
+    for (let s = 1; s <= steps; s++) {
+      const px = playerX * t + dx * (s * t * 0.5);
+      const py = playerY * t + dy * (s * t * 0.5);
+      const tx = Math.floor(px / t), ty = Math.floor(py / t);
+      if (grid.isSolid(tx, ty)) { blocked = true; break; }
+    }
+    if (blocked) occluded++;
+  }
+  return occluded / samples; // 0..1
+}
+function updateStealthAndNoise(game, dt) {
+  const player = game.player;
+  const grid = game.grid;
+  const t = grid.tile;
+  const speed = Math.hypot(player.vx, player.vy);
+  const f_v = clamp01(speed / player.maxSpeed);
+  const f_c = sampleCover(player.x, player.y, grid, 3);
+  const S = clamp01(0.05 + 0.55 * (1 - f_v) + 0.40 * f_c);
+  let N = clamp01(1 - S);
+  if (player.sneak) N *= 0.4;
+  if (game._hasPower('D')) N *= 1.4;
+  if (game._hasPower('C')) N *= 0.2;
+  player.stealth = S;
+  player.noise = clamp01(N);
+}
+
+/* =========================================================
+   Power ups
+   ========================================================= */
+function powerDuration(type) {
+  switch(type) {
+    case 'S': return 4.0;
+    case 'F': return 2.5;
+    case 'D': return 2.2;
+    case 'R': return 4.0;
+    case 'C': return 3.5;
+    default: return 0;
+  }
+}
+Game.prototype._grantPower = function(type) {
+  const order = ['P','C','F','S','D','R','X'];
+  // Process in order for simultaneous pickups; here called one-by-one already
+  if (type === 'P') {
+    this.player.shieldStacks += 1;
+    audio.beep('ui', 0.05, 0.07, 300);
+    return;
+  }
+  if (type === 'X') {
+    // Remove closest bot
+    if (this.bots.length > 0) {
+      let idx = 0, best = Infinity;
+      for (let i = 0; i < this.bots.length; i++) {
+        const b = this.bots[i];
+        const d = Math.hypot(b.x - this.player.x, b.y - this.player.y);
+        if (d < best) { best = d; idx = i; }
+      }
+      this.bots.splice(idx, 1);
+      audio.beep('ui', 0.05, 0.07, 260);
+    }
+    return;
+  }
+  // Timed types stack by refresh
+  const existing = this.activePowerups.find(p => p.type === type);
+  const dur = powerDuration(type);
+  if (existing) {
+    existing.time = dur;
+  } else {
+    this.activePowerups.push({ type, time: dur });
+  }
+  audio.beep('ui', 0.05, 0.07, 340);
+};
+Game.prototype._hasPower = function(type) {
+  return this.activePowerups.some(p => p.type === type && p.time > 0);
+};
+Game.prototype._tickPowerups = function(dt) {
+  const ticking = this.input.isMoving();
+  if (!ticking) return;
+  let any = false;
+  for (const p of this.activePowerups) {
+    if (p.time > 0) {
+      p.time -= dt;
+      if (p.time < 0) p.time = 0;
+      any = any || p.time > 0;
+    }
+  }
+  audio.setTicking(any);
+  // Remove expired
+  this.activePowerups = this.activePowerups.filter(p => p.time > 0 || p.type === 'P');
+};
+
+/* =========================================================
+   Bot perception and AI
+   ========================================================= */
+function botCanSee(bot, player, grid) {
+  const N = player.noise;
+  const R = lerp(bot.rsMin, bot.rsMax, N);
+  const FOV = lerp(bot.fovMin, bot.fovMax, N);
+  const dx = (player.x - bot.x) * grid.tile;
+  const dy = (player.y - bot.y) * grid.tile;
+  const dist = Math.hypot(dx, dy) / grid.tile;
+  if (dist > R) return false;
+  if (!withinFOV(bot.forward[0], bot.forward[1], dx, dy, FOV)) return false;
+  return hasLineOfSight(bot.x * grid.tile, bot.y * grid.tile, player.x * grid.tile, player.y * grid.tile, grid);
+}
+function botHears(bot, player, grid) {
+  const N = player.noise;
+  const R = bot.rhBase + bot.rhGain * N;
+  const d = Math.hypot(player.x - bot.x, player.y - bot.y);
+  return d <= R;
+}
+Game.prototype._ensureBotPlan = async function(bot, targetTile) {
+  if (!targetTile) return;
+  if (bot.pathfindCooldown > 0) return;
+  const sx = Math.floor(bot.x), sy = Math.floor(bot.y);
+  const [gx, gy] = targetTile;
+  bot.pathfindCooldown = bot.replanInterval;
+  const path = await this.requestPath(sx, sy, gx, gy);
+  if (path && path.length > 1) {
+    bot.plan = path;
+    bot.planIdx = 1; // next tile to move toward
+  }
+};
+Game.prototype._updateBots = function(dt) {
+  const grid = this.grid;
+  const player = this.player;
+  const t = grid.tile;
+  const playerTile = [Math.floor(player.x), Math.floor(player.y)];
+  const levelCaps = this._capsForLevel(this.level);
+
+  for (const bot of this.bots) {
+    bot.replanInterval = levelCaps.replanInterval;
+    bot.pathfindCooldown = Math.max(0, bot.pathfindCooldown - dt);
+    // Power-ups affecting bots
+    let speedMul = 1.0;
+    if (this._hasPower('S')) speedMul *= 0.65;
+    if (this._hasPower('F')) speedMul *= 0.0;
+    const bs = bot.speed * speedMul;
+
+    // Update facing
+    const fd = Math.hypot(bot.vx, bot.vy);
+    if (fd > 1e-3) bot.forward = [bot.vx / fd, bot.vy / fd];
+
+    // Perception
+    const canSee = bot.kind === 'stalker' ? true : botCanSee(bot, player, grid);
+    const canHear = bot.kind === 'stalker' ? false : botHears(bot, player, grid);
+
+    // State machine
+    if (bot.kind === 'stalker') {
+      bot.state = 'chase';
+    } else {
+      if (canSee) {
+        if (bot.state !== 'chase') audio.beep('ui', 0.05, 0.06, 500);
+        bot.state = 'chase';
+        bot.lsp = [Math.floor(player.x), Math.floor(player.y)];
+      } else if (canHear && bot.state !== 'chase') {
+        // Stamp candidate search point
+        if (!bot.lsp) bot.lsp = [Math.floor(player.x), Math.floor(player.y)];
+        bot.state = 'search';
+      } else {
+        if (bot.state === 'chase' && bot.lsp) {
+          bot.state = 'search';
+        } else if (!bot.lsp) {
+          bot.state = 'patrol';
+        }
+      }
+    }
+
+    // Plan targets
+    if (bot.state === 'patrol') {
+      // Random wander to a free tile
+      if (!bot.plan || bot.plan.length === 0 || bot.planIdx >= bot.plan.length) {
+        const tx = clamp(this.rng.int(1, grid.cols - 2), 1, grid.cols-2);
+        const ty = clamp(this.rng.int(1, grid.rows - 2), 1, grid.rows-2);
+        if (!grid.isSolid(tx,ty)) this._ensureBotPlan(bot, [tx,ty]);
+      }
+    } else if (bot.state === 'chase') {
+      // Direct steer if in LOS, else path to LSP or player tile
+      const target = bot.kind === 'stalker' ? [Math.floor(player.x), Math.floor(player.y)] :
+                      canSee ? [Math.floor(player.x), Math.floor(player.y)] : bot.lsp;
+      if (target) this._ensureBotPlan(bot, target);
+    } else if (bot.state === 'search') {
+      if (!bot.searchPoints || bot.searchPoints.length === 0) {
+        if (bot.lsp) {
+          const [lx, ly] = bot.lsp;
+          const points = [];
+          for (let i = 0; i < 6; i++) {
+            const dx = this.rng.int(-2, 2);
+            const dy = this.rng.int(-2, 2);
+            const tx = clamp(lx + dx, 1, grid.cols-2);
+            const ty = clamp(ly + dy, 1, grid.rows-2);
+            if (!grid.isSolid(tx,ty)) points.push([tx,ty]);
+          }
+          bot.searchPoints = points;
+          bot.searchIndex = 0;
+        } else {
+          bot.state = 'patrol';
+        }
+      }
+      const target = bot.searchPoints[bot.searchIndex];
+      if (target) this._ensureBotPlan(bot, target);
+      // If reached, advance search
+      if (bot.planIdx >= (bot.plan?.length || 0)) {
+        bot.searchIndex++;
+        if (bot.searchIndex >= bot.searchPoints.length) {
+          bot.searchPoints = [];
+          bot.lsp = null;
+          bot.state = 'patrol';
+        }
+      }
+    }
+
+    // Move along plan
+    let ax = 0, ay = 0;
+    if (bot.plan && bot.planIdx < bot.plan.length) {
+      const [tx, ty] = bot.plan[bot.planIdx];
+      const wx = tx + 0.5, wy = ty + 0.5;
+      const toX = wx - bot.x, toY = wy - bot.y;
+      const d = Math.hypot(toX, toY);
+      if (d < 0.05) {
+        bot.planIdx++;
+      } else {
+        const ux = toX / d, uy = toY / d;
+        bot.vx = ux * bs;
+        bot.vy = uy * bs;
+        bot.x += bot.vx * dt;
+        bot.y += bot.vy * dt;
+      }
+    } else {
+      // idle
+      bot.vx = 0; bot.vy = 0;
+    }
+
+    // Phase minimap visibility
+    if (Math.hypot(bot.vx, bot.vy) < 0.02) bot.stillTimer += dt; else bot.stillTimer = 0;
+  }
+};
+
+/* =========================================================
+   Dynamic blocks: movers and teleporters
+   ========================================================= */
+Game.prototype._updateDynamics = function(dt) {
+  const g = this.grid;
+  // Movers slide when the player is moving
+  const moving = this.input.isMoving();
+  for (const m of this.movers) {
+    if (!moving) continue;
+    // Clear old
+    g.setSolid(m.x, m.y, 0);
+    // Move slightly along axis, bounce against walls or solids
+    const step = 0.8 * dt * m.dir; // tiles per second for movers
+    let nx = m.x, ny = m.y;
+    if (m.axis === 'x') nx += step;
+    else ny += step;
+    const ix = Math.round(nx), iy = Math.round(ny);
+    // Keep within bounds and avoid critical positions
+    if (ix <= 1 || ix >= g.cols - 2 || iy <= 1 || iy >= g.rows - 2 || g.isSolid(ix, iy)) {
+      m.dir *= -1;
+    } else {
+      m.x = ix; m.y = iy;
+    }
+    g.setSolid(m.x, m.y, 1);
+  }
+  // Teleporters relocate periodically
+  for (const tp of this.teleporters) {
+    tp.timer -= dt;
+    if (tp.timer <= 0) {
+      // Remove old
+      g.setSolid(tp.x, tp.y, 0);
+      // Choose new valid location not adjacent to player, bots, exit, powerups
+      let placed = false, guard = 0;
+      while(!placed && guard++ < 500) {
+        const x = this.rng.int(2, g.cols - 3);
+        const y = this.rng.int(2, g.rows - 3);
+        if (g.isSolid(x,y)) continue;
+        const near = (ax,ay) => Math.abs(ax - x) <= 1 && Math.abs(ay - y) <= 1;
+        let bad = false;
+        if (near(Math.floor(this.player.x), Math.floor(this.player.y))) bad = true;
+        if (near(this.exit.x, this.exit.y)) bad = true;
+        for (const b of this.bots) if (near(Math.floor(b.x), Math.floor(b.y))) { bad = true; break; }
+        for (const p of this.powerups) if (near(Math.floor(p.x), Math.floor(p.y))) { bad = true; break; }
+        if (bad) continue;
+        tp.x = x; tp.y = y; placed = true;
+      }
+      g.setSolid(tp.x, tp.y, 1);
+      tp.timer = this.rng.range(4, 7);
+    }
+  }
+};
+
+/* =========================================================
+   Player update and physics
+   ========================================================= */
+Game.prototype._updatePlayer = function(dt) {
+  const [ix, iy] = this.input.axis();
+  const player = this.player;
+  player.sneak = this.input.sneak;
+  const sneakMul = player.sneak ? 0.55 : 1.0;
+  const dashMul = this._hasPower('D') ? 1.35 : 1.0;
+  const accelMul = this._hasPower('D') ? 1.5 : 1.0;
+
+  const targetMax = player.maxSpeedBase * dashMul;
+  player.maxSpeed = targetMax * sneakMul;
+  player.accel = player.accelBase * accelMul;
+
+  // Auto Stealth Assist: keep stealth >= threshold by capping speed when exposed
+  if (player.autoMode) {
+    // Predict stealth if moving at current speed and low cover, cap if would drop below threshold
+    const f_c = sampleCover(player.x, player.y, this.grid, 3);
+    // Invert S = clamp01(0.05 + 0.55*(1 - f_v) + 0.40*f_c) to solve for f_v
+    const targetS = player.autoThreshold;
+    const base = 0.05 + 0.40 * f_c;
+    let max_fv = 1 - (targetS - base) / 0.55;
+    max_fv = clamp(max_fv, 0, 1);
+    const allowedSpeed = max_fv * player.maxSpeed;
+    const curSpeed = Math.hypot(player.vx, player.vy);
+    if (curSpeed > allowedSpeed) {
+      // Apply soft drag to reduce speed under cap
+      const scale = allowedSpeed / (curSpeed + 1e-6);
+      player.vx *= scale;
+      player.vy *= scale;
+    }
+  }
+
+  // Acceleration toward input direction
+  const [nx, ny] = norm(ix, iy);
+  player.vx += nx * player.accel * dt;
+  player.vy += ny * player.accel * dt;
+
+  // Clamp speed
+  const sp = Math.hypot(player.vx, player.vy);
+  const maxSp = player.maxSpeed;
+  if (sp > maxSp) {
+    const s = maxSp / sp;
+    player.vx *= s; player.vy *= s;
+  }
+
+  // Friction when no input
+  if (Math.hypot(ix, iy) < 0.01) {
+    const f = Math.max(0, 1 - player.friction * dt);
+    player.vx *= f; player.vy *= f;
+    if (Math.hypot(player.vx, player.vy) < 0.01) { player.vx = 0; player.vy = 0; }
+  }
+
+  // Integrate position
+  let px = player.x + player.vx * dt;
+  let py = player.y + player.vy * dt;
+
+  // Resolve collisions
+  const rpx = px * this.grid.tile;
+  const rpy = py * this.grid.tile;
+  const rr = player.r * this.grid.tile;
+  const [cx, cy, rvx, rvy] = circleGridSlide(rpx, rpy, rr, player.vx * this.grid.tile, player.vy * this.grid.tile, this.grid);
+  player.x = cx / this.grid.tile;
+  player.y = cy / this.grid.tile;
+  player.vx = rvx / this.grid.tile;
+  player.vy = rvy / this.grid.tile;
+
+  // Invulnerability cooldown
+  if (player.invulnT > 0) player.invulnT -= dt;
+};
+
+/* =========================================================
+   Gameplay rules: collisions, exit, death, scoring
+   ========================================================= */
+Game.prototype._checkCollisions = function(dt) {
+  const player = this.player;
+  const cloak = this._hasPower('C');
+  // Player vs powerups
+  for (const p of this.powerups) {
+    if (!p.active) continue;
+    if (Math.hypot(p.x - player.x, p.y - player.y) <= player.r + p.r) {
+      p.active = false;
+      // Process order: P, C, F, S, D, R, X handled by caller if simultaneous; here single pickup
+      this._grantPower(p.type);
+    }
+  }
+  // Player vs exit
+  const inExit = player.x > this.exit.x && player.x < this.exit.x + this.exit.w &&
+                 player.y > this.exit.y && player.y < this.exit.y + this.exit.h;
+  let caughtThisFrame = false;
+  // Player vs bots
+  for (const b of this.bots) {
+    const hit = Math.hypot(b.x - player.x, b.y - player.y) <= player.r + 0.35;
+    if (hit) {
+      if (this._hasPower('R')) {
+        // Predator destroys bot
+        const idx = this.bots.indexOf(b);
+        if (idx >= 0) this.bots.splice(idx, 1);
+        audio.beep('ui', 0.05, 0.06, 220);
+        continue;
+      }
+      if (cloak) {
+        // Collisions cannot catch
+        continue;
+      }
+      if (player.invulnT > 0) continue;
+      if (player.shieldStacks > 0) {
+        player.shieldStacks -= 1;
+        player.invulnT = 0.3;
+        // push away
+        const dx = player.x - b.x, dy = player.y - b.y;
+        const d = Math.hypot(dx, dy) || 1;
+        player.vx = (dx / d) * 3.0;
+        player.vy = (dy / d) * 3.0;
+        audio.beep('ui', 0.06, 0.08, 180);
+      } else {
+        caughtThisFrame = true;
+      }
+    }
+  }
+  // Exit precedence if both on same frame
+  if (inExit) {
+    audio.beep('ui', 0.05, 0.05, 700);
+    this._advanceLevel();
+    return;
+  }
+  if (caughtThisFrame) {
+    this._die();
+  }
+};
+Game.prototype._advanceLevel = function() {
+  this.level++;
+  this.score += 100; // level bonus
+  this._newLevel();
+};
+Game.prototype._die = function() {
+  audio.beep('ui', 0.08, 0.12, 120);
+  // Final score
+  const timeScore = Math.floor(this.stats.survival);
+  const finalScore = (this.level * 100) + timeScore;
+  this.score += timeScore;
+  const boardKey = this.mode === GameMode.Daily ? SAVE_KEYS.bestDaily : SAVE_KEYS.bestStandard;
+  const board = Save.read(boardKey, []);
+  board.push({ score: finalScore, level: this.level, time: timeScore, date: Date.now() });
+  board.sort((a,b) => b.score - a.score);
+  while (board.length > 5) board.pop();
+  Save.write(boardKey, board);
+  this.totalRuns += 1;
+  Save.write(SAVE_KEYS.totalRuns, this.totalRuns);
+  // Show death overlay and restart run
+  this._showDeath(finalScore, board);
+  this._newRun();
+};
+Game.prototype._showDeath = function(finalScore, board) {
+  const pause = document.getElementById('pause');
+  const panel = pause.querySelector('.panel');
+  const modeSelect = document.getElementById('modeSelect');
+  // Temporarily show a summary card above controls
+  const wrap = document.createElement('div');
+  wrap.style.borderTop = '1px solid #2a3138';
+  wrap.style.marginTop = '10px';
+  wrap.style.paddingTop = '10px';
+  wrap.innerHTML = `
+    <h3>Run ended</h3>
+    <p>Score ${finalScore} · Reached level ${this.level} · Survived ${Math.floor(this.stats.survival)} s</p>
+    <h3>Highscores (${modeSelect.value === 'daily' ? 'Daily Seed' : 'Standard'})</h3>
+    <ol style="padding-left:20px;margin-top:6px">
+      ${board.map(b => `<li>${b.score} · L${b.level} · ${b.time}s</li>`).join('')}
+    </ol>
+  `;
+  // Remove previous summary if exists
+  const prev = panel.querySelector('.summary');
+  if (prev) prev.remove();
+  wrap.className = 'summary';
+  panel.appendChild(wrap);
+  this._togglePause(true);
+};
+
+/* =========================================================
+   Minimap and HUD
+   ========================================================= */
+Game.prototype._drawMinimap = function() {
+  if (!this.minimap.on) return;
+  const c = this.r.ctx;
+  const margin = 10;
+  const scale = 2; // pixels per tile in minimap
+  const w = this.grid.cols * scale;
+  const h = this.grid.rows * scale;
+  const x0 = this.r.width - w - margin;
+  const y0 = margin;
+  // Background
+  c.fillStyle = 'rgba(0,0,0,0.35)';
+  c.fillRect(x0 - 4, y0 - 4, w + 8, h + 8);
+  // Grid blocks
+  c.fillStyle = '#25303a';
+  for (let y = 0; y < this.grid.rows; y++) {
+    for (let x = 0; x < this.grid.cols; x++) {
+      if (this.grid.isSolid(x,y)) c.fillRect(x0 + x*scale, y0 + y*scale, scale, scale);
+    }
+  }
+  // Exit
+  c.fillStyle = '#4fc3f7';
+  c.fillRect(x0 + this.exit.x*scale, y0 + this.exit.y*scale, scale, scale);
+
+  // Powerups
+  for (const p of this.powerups) {
+    if (!p.active) continue;
+    c.fillStyle = '#9ccc65';
+    c.fillRect(x0 + Math.floor(p.x)*scale, y0 + Math.floor(p.y)*scale, scale, scale);
+  }
+  // Bots
+  for (const b of this.bots) {
+    if (b.kind === 'phase' && b.stillTimer < 0.3) continue; // hidden while moving
+    c.fillStyle = '#ef5350';
+    c.fillRect(x0 + Math.floor(b.x)*scale, y0 + Math.floor(b.y)*scale, scale, scale);
+  }
+  // Player
+  c.fillStyle = '#ffffff';
+  c.fillRect(x0 + Math.floor(this.player.x)*scale, y0 + Math.floor(this.player.y)*scale, scale, scale);
+};
+Game.prototype._drawHUD = function(dt) {
+  const c = this.r.ctx;
+  const w = this.r.width, h = this.r.height;
+  const pad = 12;
+  // Stealth bar
+  const barW = Math.min(420 * this.r.pixelRatio, w - 2*pad);
+  const barH = 12 * this.r.pixelRatio;
+  const x = pad, y = h - barH - pad;
+  c.fillStyle = '#11161b';
+  c.fillRect(x, y, barW, barH);
+  const v = clamp01(this.player.stealth);
+  c.fillStyle = '#66bb6a';
+  c.fillRect(x, y, barW * v, barH);
+  c.strokeStyle = '#2f3a44';
+  c.strokeRect(x, y, barW, barH);
+  // Labels
+  c.fillStyle = '#9fb3c4';
+  c.font = `${Math.floor(12 * this.r.pixelRatio)}px system-ui, sans-serif`;
+  c.fillText(`Stealth ${v.toFixed(2)}`, x, y - 6);
+
+  // Level and score
+  c.fillStyle = '#d0d6dc';
+  c.font = `${Math.floor(16 * this.r.pixelRatio)}px system-ui, sans-serif`;
+  c.fillText(`Level ${this.level}`, x, pad + 18 * this.r.pixelRatio);
+  c.fillText(`Score ${this.score + Math.floor(this.stats.survival)}`, x + 120 * this.r.pixelRatio, pad + 18 * this.r.pixelRatio);
+
+  // Status tags
+  const tags = [];
+  if (this.player.autoMode) tags.push('AUTO');
+  if (this.player.sneak) tags.push('SNEAK');
+  const tagY = y - 22 * this.r.pixelRatio;
+  let tx = x;
+  for (const t of tags) {
+    const tw = c.measureText(t).width + 12 * this.r.pixelRatio;
+    c.fillStyle = '#182028'; c.fillRect(tx, tagY, tw, 16 * this.r.pixelRatio);
+    c.strokeStyle = '#2a3540'; c.strokeRect(tx, tagY, tw, 16 * this.r.pixelRatio);
+    c.fillStyle = '#b6c3cd'; c.fillText(t, tx + 6 * this.r.pixelRatio, tagY + 13 * this.r.pixelRatio);
+    tx += tw + 6 * this.r.pixelRatio;
+  }
+
+  // Powerup icons with countdown rings
+  let px = x + barW + 12 * this.r.pixelRatio;
+  for (const p of this.activePowerups) {
+    if (p.type === 'P') continue;
+    const size = 18 * this.r.pixelRatio;
+    px += size + 8 * this.r.pixelRatio;
+    c.fillStyle = '#131a21';
+    c.fillRect(px, y, size, size);
+    c.strokeStyle = '#2a3540'; c.strokeRect(px, y, size, size);
+    c.fillStyle = '#d9dee4';
+    c.textAlign = 'center';
+    c.fillText(p.type, px + size * 0.5, y + size - 4 * this.r.pixelRatio);
+    // ring
+    const frac = clamp01(p.time / powerDuration(p.type));
+    c.beginPath();
+    c.strokeStyle = '#64b5f6';
+    c.lineWidth = 2 * this.r.pixelRatio;
+    const cx = px + size * 0.5, cy = y - 2 * this.r.pixelRatio;
+    c.arc(cx, cy, 8 * this.r.pixelRatio, -Math.PI/2, -Math.PI/2 + Math.PI*2*frac);
+    c.stroke();
+  }
+  c.textAlign = 'left';
+
+  // Optional FPS
+  c.fillStyle = '#7f8c98';
+  c.font = `${Math.floor(12 * this.r.pixelRatio)}px system-ui, sans-serif`;
+  c.fillText(`${Math.round(1000 / this._lastFrameTime || 60)} FPS`, w - 70 * this.r.pixelRatio, h - 8 * this.r.pixelRatio);
+};
+Game.prototype._drawDebug = function() {
+  if (!this.debug) return;
+  const c = this.r.ctx, t = this.grid.tile;
+  c.save();
+  c.strokeStyle = 'rgba(255,255,255,0.15)';
+  // Grid
+  for (let x = 0; x <= this.grid.cols; x++) {
+    c.beginPath(); c.moveTo(x*t, 0); c.lineTo(x*t, this.r.height); c.stroke();
+  }
+  for (let y = 0; y <= this.grid.rows; y++) {
+    c.beginPath(); c.moveTo(0, y*t); c.lineTo(this.r.width, y*t); c.stroke();
+  }
+  // Bot FOV and LOS
+  for (const b of this.bots) {
+    const px = b.x * t, py = b.y * t;
+    const fov = lerp(b.fovMin, b.fovMax, this.player.noise) * Math.PI / 180;
+    const dir = Math.atan2(b.forward[1], b.forward[0]);
+    c.beginPath(); c.arc(px, py, lerp(b.rsMin, b.rsMax, this.player.noise) * t, dir - fov*0.5, dir + fov*0.5);
+    c.strokeStyle = 'rgba(255,120,120,0.35)'; c.stroke();
+    // LOS
+    c.beginPath(); c.moveTo(px, py); c.lineTo(this.player.x*t, this.player.y*t);
+    c.strokeStyle = 'rgba(255,255,120,0.25)'; c.stroke();
+    // Planned path
+    if (b.plan && b.plan.length > 0) {
+      c.beginPath();
+      c.moveTo(px, py);
+      for (let i = b.planIdx; i < b.plan.length; i++) {
+        const [tx, ty] = b.plan[i];
+        c.lineTo((tx+0.5)*t, (ty+0.5)*t);
+      }
+      c.strokeStyle = 'rgba(130,180,255,0.4)'; c.stroke();
+    }
+  }
+  c.restore();
+};
+
+/* =========================================================
+   Render world
+   ========================================================= */
+Game.prototype._renderWorld = function() {
+  const c = this.r.ctx, t = this.grid.tile;
+  // Blocks
+  this.grid.each((x,y,solid) => {
+    if (solid) {
+      c.fillStyle = '#172028';
+      c.fillRect(x*t, y*t, t, t);
+    }
+  });
+  // Exit
+  c.fillStyle = '#1b5e20';
+  c.fillRect(this.exit.x*t, this.exit.y*t, this.exit.w*t, this.exit.h*t);
+
+  // Powerups
+  for (const p of this.powerups) {
+    if (!p.active) continue;
+    const cx = p.x*t, cy = p.y*t, r = 0.35*t;
+    c.beginPath();
+    c.arc(cx, cy, r, 0, Math.PI*2);
+    c.fillStyle = '#8bc34a'; c.fill();
+    c.strokeStyle = '#375a1b'; c.stroke();
+    c.fillStyle = '#0b2306';
+    c.font = `${Math.floor(12 * this.r.pixelRatio)}px system-ui, sans-serif`;
+    c.textAlign = 'center';
+    c.fillText(p.type, cx, cy + 4 * this.r.pixelRatio);
+  }
+  c.textAlign = 'left';
+
+  // Bots
+  for (const b of this.bots) {
+    const cx = b.x*t, cy = b.y*t, r = 0.35*t;
+    c.beginPath();
+    c.arc(cx, cy, r, 0, Math.PI*2);
+    c.fillStyle = b.kind === 'stalker' ? '#f06292' : (b.kind === 'phase' ? '#80cbc4' : '#ef5350');
+    c.fill();
+    // Facing
+    c.beginPath();
+    c.moveTo(cx, cy);
+    c.lineTo(cx + b.forward[0]*r, cy + b.forward[1]*r);
+    c.strokeStyle = '#1a1a1a'; c.stroke();
+  }
+
+  // Player
+  const pr = this.player.r * t;
+  const px = this.player.x * t, py = this.player.y * t;
+  c.beginPath();
+  c.arc(px, py, pr, 0, Math.PI*2);
+  c.fillStyle = '#e0e0e0';
+  c.fill();
+  if (this.player.invulnT > 0) {
+    c.strokeStyle = 'rgba(255,255,255,0.7)';
+    c.lineWidth = 2;
+    c.stroke();
+  }
+};
+
+/* =========================================================
+   Loop and state transitions
+   ========================================================= */
+Game.prototype._togglePause = function(on) {
+  this.paused = on;
+  document.getElementById('pause').classList.toggle('visible', on);
+};
+Game.prototype._updatePauseUI = function() {
+  if (this.input.pausePressed) {
+    this._togglePause(!this.paused);
+    this.input.pausePressed = false;
+  }
+  // Sync UI checkboxes when opening settings with O
+  if (this.input.settingsOpen) {
+    this._togglePause(true);
+    this.input.settingsOpen = false;
+  }
+};
+
+Game.prototype.tick = function(dt) {
+  // Dynamic load shedding: if average frame time too high, reduce minimap updates
+  this.frameTimeAvg = this.frameTimeAvg * 0.9 + dt * 1000 * 0.1;
+  if (this.frameTimeAvg > 25) {
+    // reduce bot replan frequency a bit by adding cooldown
+    for (const b of this.bots) b.replanInterval = Math.min(1.2, b.replanInterval + 0.1);
+  }
+
+  // Settings toggles from input
+  if (this.input.muted !== !this.audioOn) {
+    this.audioOn = !this.input.muted;
+    audio.muteAll(!this.audioOn);
+  }
+  if (this.input.debug !== this.debug) this.debug = this.input.debug;
+  this.minimap.on = this.input.minimap;
+  if (this.input.requestRestart) { this._newRun(); this.input.requestRestart = false; }
+  this._updatePauseUI();
+  if (this.paused) return;
+
+  // Sync Auto flag
+  this.player.autoMode = this.input.auto;
+
+  // Update dynamics before physics so collisions reflect new solids
+  this._updateDynamics(dt);
+
+  // Player and stealth
+  this._updatePlayer(dt);
+  updateStealthAndNoise(this, dt);
+
+  // Tick powerups only when moving input present
+  this._tickPowerups(dt);
+
+  // Update bots
+  this._updateBots(dt);
+
+  // Collisions and rules
+  this._checkCollisions(dt);
+
+  // Survival time
+  this.stats.survival += dt;
+};
+
+Game.prototype.render = function(dt) {
+  this.r.clear();
+  this._renderWorld();
+  this._drawMinimap();
+  this._drawHUD(dt);
+  this._drawDebug();
+};
+
+function main() {
+  const canvas = document.getElementById('game');
+  const game = new Game(canvas);
+  // Send initial grid to worker after a tick to ensure worker created
+  setTimeout(() => game._syncGridToWorker(), 50);
+
+  let last = performance.now();
+  let acc = 0;
+  const dt = 1/60;
+
+  function frame(tnow) {
+    const raw = tnow - last; last = tnow;
+    acc += Math.min(0.25, raw / 1000); // cap accumulation
+    while (acc >= dt) {
+      game.tick(dt);
+      acc -= dt;
+    }
+    game._lastFrameTime = raw;
+    game.render(dt);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // Pause overlay controls reflect game state on open
+  const pause = document.getElementById('pause');
+  pause.addEventListener('transitionend', () => {
+    // no-op placeholder
+  });
+}
+
+window.addEventListener('load', main);
+})();</script>
+</body>
+</html>
